@@ -1,0 +1,460 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  UNVERIFIED
+}
+
+enum CommentStatus {
+  ACTIVE
+  HIDDEN
+  DELETED
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum MediaType {
+  MOVIE
+  TV
+}
+
+enum GenderType {
+  UNKNOWN
+  FEMALE
+  MALE
+  NON_BINARY
+}
+
+model User {
+  id              String          @id @default(uuid()) @db.Uuid
+  email           String          @unique @db.VarChar(255)
+  passwordHash    String?         @db.Text
+  displayName     String          @db.VarChar(100)
+  avatarUrl       String?         @db.Text
+  bio             String?         @db.Text
+  role            UserRole        @default(USER)
+  status          UserStatus      @default(UNVERIFIED)
+  emailVerified   Boolean         @default(false)
+  oauthProvider   String?         @db.VarChar(50)
+  oauthId         String?         @db.VarChar(255)
+  language        String          @default("vi") @db.VarChar(10)
+  loginAttempts   Int             @default(0)
+  lockedUntil     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  ratings         Rating[]
+  comments        Comment[]
+  watchlistItems  WatchlistItem[]
+  favoriteItems   FavoriteItem[]
+  reports         Report[]        @relation("UserReports")
+  reportsReceived Report[]        @relation("ReportedUser")
+  resolvedReports Report[]        @relation("ResolvedReports")
+  activityLogs    ActivityLog[]
+  refreshTokens   RefreshToken[]
+
+  @@unique([oauthProvider, oauthId])
+}
+
+model Movie {
+  id                Int                 @id @default(autoincrement())
+  tmdbId            Int?                @unique
+  title             String              @db.VarChar(500)
+  originalTitle     String?             @db.VarChar(500)
+  overview          String?             @db.Text
+  releaseDate       DateTime?
+  runtime           Int?
+  language          String?             @db.VarChar(10)
+  budget            BigInt?             @default(0)
+  revenue           BigInt?             @default(0)
+  status            String?             @db.VarChar(50)
+  voteAverage       Float               @default(0)
+  voteCount         Int                 @default(0)
+  tmdbVoteAverage   Float               @default(0)
+  tmdbVoteCount     Int                 @default(0)
+  popularity        Float               @default(0)
+  posterUrl         String?             @db.Text
+  backdropUrl       String?             @db.Text
+  isDeleted         Boolean             @default(false)
+  isAdminEdited     Boolean             @default(false)
+  adminEditedFields Json?
+  tmdbLastSynced    DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  genres            Genre[]             @relation("MovieGenres")
+  cast              MovieCast[]
+  crew              MovieCrew[]
+  countries         Country[]           @relation("MovieCountries")
+  companies         ProductionCompany[] @relation("MovieCompanies")
+  ratings           Rating[]
+  comments          Comment[]
+  watchlistItems    WatchlistItem[]
+  favoriteItems     FavoriteItem[]
+  trailers          Trailer[]
+  images            Image[]
+
+  @@index([releaseDate(sort: Desc)])
+  @@index([popularity(sort: Desc)])
+  @@index([voteAverage(sort: Desc)])
+  @@index([isDeleted])
+}
+
+model TVSeries {
+  id                Int                 @id @default(autoincrement())
+  tmdbId            Int?                @unique
+  title             String              @db.VarChar(500)
+  originalTitle     String?             @db.VarChar(500)
+  overview          String?             @db.Text
+  firstAirDate      DateTime?
+  lastAirDate       DateTime?
+  status            String?             @db.VarChar(50)
+  numberOfSeasons   Int                 @default(0)
+  numberOfEpisodes  Int                 @default(0)
+  voteAverage       Float               @default(0)
+  voteCount         Int                 @default(0)
+  tmdbVoteAverage   Float               @default(0)
+  tmdbVoteCount     Int                 @default(0)
+  popularity        Float               @default(0)
+  posterUrl         String?             @db.Text
+  backdropUrl       String?             @db.Text
+  isDeleted         Boolean             @default(false)
+  isAdminEdited     Boolean             @default(false)
+  adminEditedFields Json?
+  tmdbLastSynced    DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  seasons           Season[]
+  genres            Genre[]             @relation("TVSeriesGenres")
+  cast              SeriesCast[]
+  crew              SeriesCrew[]
+  countries         Country[]           @relation("TVSeriesCountries")
+  companies         ProductionCompany[] @relation("TVSeriesCompanies")
+  ratings           Rating[]
+  comments          Comment[]
+  watchlistItems    WatchlistItem[]
+  favoriteItems     FavoriteItem[]
+  trailers          Trailer[]
+  images            Image[]
+
+  @@index([firstAirDate(sort: Desc)])
+  @@index([popularity(sort: Desc)])
+  @@index([voteAverage(sort: Desc)])
+  @@index([isDeleted])
+}
+
+model Season {
+  id           Int       @id @default(autoincrement())
+  seriesId     Int
+  tmdbId       Int?
+  seasonNumber Int
+  name         String?   @db.VarChar(255)
+  overview     String?   @db.Text
+  airDate      DateTime?
+  posterUrl    String?   @db.Text
+  episodeCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  series       TVSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  episodes     Episode[]
+
+  @@unique([seriesId, seasonNumber])
+  @@index([tmdbId])
+}
+
+model Episode {
+  id            Int       @id @default(autoincrement())
+  seasonId      Int
+  tmdbId        Int?
+  episodeNumber Int
+  name          String?   @db.VarChar(255)
+  overview      String?   @db.Text
+  airDate       DateTime?
+  runtime       Int?
+  stillUrl      String?   @db.Text
+  voteAverage   Float     @default(0)
+  voteCount     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  season        Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonId, episodeNumber])
+  @@index([tmdbId])
+}
+
+model Person {
+  id                 Int          @id @default(autoincrement())
+  tmdbId             Int?         @unique
+  name               String       @db.VarChar(300)
+  originalName       String?      @db.VarChar(300)
+  biography          String?      @db.Text
+  birthday           DateTime?
+  deathday           DateTime?
+  placeOfBirth       String?      @db.VarChar(255)
+  gender             GenderType   @default(UNKNOWN)
+  profileUrl         String?      @db.Text
+  popularity         Float        @default(0)
+  knownForDepartment String?      @db.VarChar(100)
+  tmdbLastSynced     DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  movieCast          MovieCast[]
+  movieCrew          MovieCrew[]
+  seriesCast         SeriesCast[]
+  seriesCrew         SeriesCrew[]
+  images             Image[]
+
+  @@index([popularity(sort: Desc)])
+}
+
+model Genre {
+  id        Int        @id @default(autoincrement())
+  tmdbId    Int?       @unique
+  name      String     @db.VarChar(100)
+  slug      String     @unique @db.VarChar(100)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  movies    Movie[]    @relation("MovieGenres")
+  tvSeries  TVSeries[] @relation("TVSeriesGenres")
+}
+
+model Rating {
+  id        Int       @id @default(autoincrement())
+  userId    String    @db.Uuid
+  movieId   Int?
+  seriesId  Int?
+  score     Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie     Movie?    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  series    TVSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@unique([userId, seriesId])
+  @@index([movieId])
+  @@index([seriesId])
+  @@index([userId])
+}
+
+model Comment {
+  id        Int           @id @default(autoincrement())
+  userId    String        @db.Uuid
+  movieId   Int?
+  seriesId  Int?
+  content   String        @db.VarChar(5000)
+  status    CommentStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie     Movie?        @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  series    TVSeries?     @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  reports   Report[]
+
+  @@index([movieId, createdAt(sort: Desc)])
+  @@index([seriesId, createdAt(sort: Desc)])
+}
+
+model WatchlistItem {
+  id       Int       @id @default(autoincrement())
+  userId   String    @db.Uuid
+  movieId  Int?
+  seriesId Int?
+  addedAt  DateTime  @default(now())
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie    Movie?    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  series   TVSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@unique([userId, seriesId])
+}
+
+model FavoriteItem {
+  id       Int       @id @default(autoincrement())
+  userId   String    @db.Uuid
+  movieId  Int?
+  seriesId Int?
+  addedAt  DateTime  @default(now())
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie    Movie?    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  series   TVSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+  @@unique([userId, seriesId])
+}
+
+model Trailer {
+  id          Int       @id @default(autoincrement())
+  movieId     Int?
+  seriesId    Int?
+  name        String?   @db.VarChar(255)
+  key         String    @db.VarChar(50)
+  site        String    @default("YouTube") @db.VarChar(50)
+  type        String?   @db.VarChar(50)
+  official    Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  movie       Movie?    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  series      TVSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@index([movieId])
+  @@index([seriesId])
+}
+
+model Image {
+  id        Int       @id @default(autoincrement())
+  movieId   Int?
+  seriesId  Int?
+  personId  Int?
+  filePath  String    @db.Text
+  type      String    @db.VarChar(50)
+  width     Int?
+  height    Int?
+  createdAt DateTime  @default(now())
+  movie     Movie?    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  series    TVSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  person    Person?   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([movieId])
+  @@index([seriesId])
+  @@index([personId])
+}
+
+model Country {
+  id       Int        @id @default(autoincrement())
+  isoCode  String     @unique @db.VarChar(10)
+  name     String     @db.VarChar(200)
+  movies   Movie[]    @relation("MovieCountries")
+  tvSeries TVSeries[] @relation("TVSeriesCountries")
+}
+
+model ProductionCompany {
+  id            Int        @id @default(autoincrement())
+  tmdbId        Int?       @unique
+  name          String     @db.VarChar(255)
+  logoUrl       String?    @db.Text
+  originCountry String?    @db.VarChar(10)
+  movies        Movie[]    @relation("MovieCompanies")
+  tvSeries      TVSeries[] @relation("TVSeriesCompanies")
+}
+
+model MovieCast {
+  id           Int     @id @default(autoincrement())
+  movieId      Int
+  personId     Int
+  character    String? @db.VarChar(255)
+  displayOrder Int     @default(0)
+  movie        Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  person       Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([movieId, personId, character])
+}
+
+model MovieCrew {
+  id         Int     @id @default(autoincrement())
+  movieId    Int
+  personId   Int
+  job        String? @db.VarChar(100)
+  department String? @db.VarChar(100)
+  movie      Movie   @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  person     Person  @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([movieId, personId, job])
+}
+
+model SeriesCast {
+  id           Int      @id @default(autoincrement())
+  seriesId     Int
+  personId     Int
+  character    String?  @db.VarChar(255)
+  displayOrder Int      @default(0)
+  series       TVSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  person       Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([seriesId, personId, character])
+}
+
+model SeriesCrew {
+  id         Int      @id @default(autoincrement())
+  seriesId   Int
+  personId   Int
+  job        String?  @db.VarChar(100)
+  department String?  @db.VarChar(100)
+  series     TVSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([seriesId, personId, job])
+}
+
+model Report {
+  id           Int          @id @default(autoincrement())
+  reporterId   String       @db.Uuid
+  commentId    Int?
+  targetUserId String?      @db.Uuid
+  reason       String       @db.VarChar(500)
+  status       ReportStatus @default(PENDING)
+  resolvedBy   String?      @db.Uuid
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  reporter     User         @relation("UserReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  comment      Comment?     @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  targetUser   User?        @relation("ReportedUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  resolver     User?        @relation("ResolvedReports", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@unique([reporterId, commentId])
+}
+
+model ActivityLog {
+  id         Int      @id @default(autoincrement())
+  userId     String   @db.Uuid
+  action     String   @db.VarChar(50)
+  entityType String?  @db.VarChar(50)
+  entityId   Int?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model TmdbSyncLog {
+  id             Int       @id @default(autoincrement())
+  syncType       String    @db.VarChar(50)
+  entityType     String    @db.VarChar(50)
+  totalProcessed Int       @default(0)
+  totalCreated   Int       @default(0)
+  totalUpdated   Int       @default(0)
+  totalErrors    Int       @default(0)
+  errorDetails   Json?
+  startedAt      DateTime
+  completedAt    DateTime?
+  status         String    @db.VarChar(50)
+  createdAt      DateTime  @default(now())
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  userId    String   @db.Uuid
+  token     String   @unique @db.Text
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
