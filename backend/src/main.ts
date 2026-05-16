@@ -9,10 +9,12 @@ import { AppModule } from '@/app.module';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
 import { TransformInterceptor } from '@/common/interceptors/transform.interceptor';
+import { PrismaService } from '@/prisma/prisma.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  const prismaService = app.get(PrismaService);
 
   const frontendUrl = configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
   const port = configService.get<number>('APP_PORT', 4000);
@@ -44,8 +46,8 @@ async function bootstrap() {
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, swaggerDocument);
 
+  await prismaService.enableShutdownHooks(app);
   await app.listen(port);
 }
 
 void bootstrap();
-

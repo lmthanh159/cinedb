@@ -1,4 +1,3 @@
-import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -7,11 +6,19 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { AuthModule } from '@/modules/auth/auth.module';
+import { GenresModule } from '@/modules/genres/genres.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { MoviesModule } from '@/modules/movies/movies.module';
 import { PeopleModule } from '@/modules/people/people.module';
+import { RatingsCommentsModule } from '@/modules/ratings-comments/ratings-comments.module';
 import { RecommendationsModule } from '@/modules/recommendations/recommendations.module';
+import { SearchModule } from '@/modules/search/search.module';
+import { TmdbModule } from '@/modules/tmdb/tmdb.module';
+import { TrendingModule } from '@/modules/trending/trending.module';
 import { TvSeriesModule } from '@/modules/tv-series/tv-series.module';
+import { UsersModule } from '@/modules/users/users.module';
+import { PrismaModule } from '@/prisma/prisma.module';
+import { RedisModule } from '@/redis/redis.module';
 
 @Module({
   imports: [
@@ -19,7 +26,8 @@ import { TvSeriesModule } from '@/modules/tv-series/tv-series.module';
       isGlobal: true,
       envFilePath: ['../.env', '.env'],
     }),
-    CacheModule.register(),
+    PrismaModule,
+    RedisModule,
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
@@ -32,7 +40,13 @@ import { TvSeriesModule } from '@/modules/tv-series/tv-series.module';
     MoviesModule,
     TvSeriesModule,
     PeopleModule,
+    RatingsCommentsModule,
+    UsersModule,
+    SearchModule,
     RecommendationsModule,
+    TrendingModule,
+    GenresModule,
+    TmdbModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -2,12 +2,12 @@
 
 CineDB is a movie and TV metadata platform organized as a monorepo with three services:
 
-- `backend/`: NestJS API server with Prisma and TMDB import scripts
+- `backend/`: NestJS API server with Prisma, Redis, Elasticsearch, and TMDB sync
 - `frontend/`: Next.js web application
 - `recommendation/`: FastAPI recommendation service
 - `docker/`: local PostgreSQL, Redis, and Elasticsearch infrastructure
 
-Phase 0 is implemented through `WP-0.4`, including Docker infrastructure, Prisma schema and migrations, seed data, and TMDB import flows.
+Phase 1 is complete. The backend now includes authentication, movie/TV/person APIs, ratings, comments, user actions, Elasticsearch search/discover, trending/genres, and TMDB import/sync workflows.
 
 ## Prerequisites
 
@@ -50,7 +50,18 @@ npm run tmdb:import
 npm run tmdb:import:tv
 ```
 
-6. Run the services:
+For the Phase 1 dataset checkpoint, run the backend and trigger the admin TMDB full import endpoint with enough pages to reach 500+ active movies.
+
+```bash
+cd backend
+npm run start
+
+# In another shell, login as the seeded admin and call:
+# POST http://localhost:4000/api/v1/admin/tmdb/import/full
+# Body: { "moviePages": 25, "tvPages": 1 }
+```
+
+6. Run the services in development:
 
 ```bash
 # backend
@@ -113,6 +124,23 @@ cinedb/
 - `npm run tmdb:import`: import sample TMDB movies, cast, crew, trailers, genres, countries, and companies
 - `npm run tmdb:import:tv`: import sample TMDB TV series, seasons, episodes, cast, crew, trailers, genres, countries, and companies
 
+### Backend Phase 1 Verification
+
+```bash
+cd backend
+npm run lint
+npm run build
+npm test -- --runInBand
+npm exec ts-node scripts/verify-import.ts
+```
+
+Rebuild Elasticsearch after large imports:
+
+```bash
+# Login as an ADMIN user first, then call:
+POST http://localhost:4000/api/v1/admin/search/reindex
+```
+
 ### Frontend
 
 - `npm run dev`: run Next.js locally
@@ -121,17 +149,43 @@ cinedb/
 - `npm run lint`: run ESLint
 - `npm run test`: placeholder test script
 
+## Backend Modules
+
+Phase 1 implemented these backend modules:
+
+- Authentication and RBAC with JWT, refresh tokens, Redis token blacklist, Google OAuth hooks, and Swagger docs.
+- Movies, TV series, and people APIs with public read endpoints, admin CRUD, Redis caching, and Prisma-backed pagination.
+- Ratings, comments, reports, watchlist, favorites, activity feed, and public/current user profile APIs.
+- Elasticsearch search, autocomplete, discover, and admin reindex with PostgreSQL fallback.
+- Trending and genre APIs with Redis caching and scheduled refresh.
+- TMDB client, mapper, full import, daily sync, trending sync, sync logs, and admin TMDB endpoints.
+
 ## Seeded and Imported Data
 
-After running Phase 0 setup, the database is expected to contain at least:
+After the final Phase 1 checkpoint, the local database contained:
 
 - 1 admin user and 5 test users
-- 100 imported movies
-- 40 imported TV series
-- 2000+ people records
-- posters and backdrops populated from TMDB URLs
+- 501 movies total, including 500 active movies
+- 42 TV series total, including 41 active TV series
+- 58,815 people records
+- 114 trailers
+- Elasticsearch indexes with 500 movies, 41 TV series, and 58,815 people
 
 The exact counts for genres, countries, and companies can grow beyond the seed baseline because the TMDB import scripts upsert missing related records encountered during import.
+
+## Phase 1 Checkpoint
+
+Final backend checkpoint results:
+
+- Docker infrastructure healthy: PostgreSQL, Redis, Elasticsearch.
+- Elasticsearch cluster status: green.
+- Backend health, Swagger, admin login, RBAC, movie search, discover, trending, genres, and TMDB sync logs smoke-tested.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test -- --runInBand`: 15 suites passed, 139 tests passed.
+- Latest full TMDB import logs: movie and TV imports completed with `SUCCESS` and `0` errors.
+
+Phase 1 is ready to tag as `v0.2.0`.
 
 ## Documentation
 
@@ -144,6 +198,6 @@ The exact counts for genres, countries, and companies can grow beyond the seed b
 
 ## Notes
 
-- Docker services verified in Phase 0: PostgreSQL, Redis, Elasticsearch
-- Backend, frontend, and recommendation all boot successfully in local development
+- Docker services verified: PostgreSQL, Redis, Elasticsearch
+- Backend, frontend, and recommendation boot successfully in local development
 - The generated `.env` still requires a real `TMDB_API_KEY` before import flows can run

@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 coverage/
+*.log
 *.pyc
 __pycache__/
 .pytest_cache/
@@ -13,4 +14,3 @@ __pycache__/
 postgres_data/
 es_data/
 .DS_Store
-
