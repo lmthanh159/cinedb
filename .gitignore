@@ -14,3 +14,6 @@ __pycache__/
 postgres_data/
 es_data/
 .DS_Store
+.claude/
+*.md
+!README.md
