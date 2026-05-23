@@ -19,6 +19,8 @@ describe('UsersService', () => {
   const prismaService = {
     $transaction: jest.fn(),
     user: {
+      count: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
     },
@@ -60,15 +62,21 @@ describe('UsersService', () => {
     },
   } as unknown as PrismaService;
 
-  const redisService = {} as RedisService;
+  const redisService = {
+    del: jest.fn(),
+  } as unknown as RedisService;
   const userId = '8a3c3f62-6805-4c4e-bdd0-516b8f318dc5';
   let usersService: UsersService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     usersService = new UsersService(prismaService, redisService);
+    prismaService.user.count = jest.fn().mockResolvedValue(1);
+    prismaService.user.findMany = jest.fn().mockResolvedValue([
+      createAdminUser(),
+    ]);
     prismaService.user.findUnique = jest.fn().mockResolvedValue(createUser());
-    prismaService.user.update = jest.fn().mockResolvedValue(createUser({
+    prismaService.user.update = jest.fn().mockResolvedValue(createAdminUser({
       displayName: 'Updated User',
     }));
     prismaService.refreshToken.deleteMany = jest.fn().mockResolvedValue({ count: 1 });
@@ -89,6 +97,7 @@ describe('UsersService', () => {
     ]);
     prismaService.rating.count = jest.fn().mockResolvedValue(3);
     prismaService.comment.count = jest.fn().mockResolvedValue(2);
+    redisService.del = jest.fn().mockResolvedValue(undefined);
   });
 
   function createUser(overrides: Record<string, unknown> = {}) {
@@ -105,6 +114,19 @@ describe('UsersService', () => {
       language: 'vi',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  function createAdminUser(overrides: Record<string, unknown> = {}) {
+    return {
+      ...createUser(),
+      loginAttempts: 0,
+      lockedUntil: null,
+      _count: {
+        ratings: 3,
+        comments: 2,
+      },
       ...overrides,
     };
   }
@@ -343,6 +365,104 @@ describe('UsersService', () => {
         userId,
         status: CommentStatus.ACTIVE,
       },
+    });
+  });
+
+  it('gets admin users with filters and pagination', async () => {
+    prismaService.$transaction = jest.fn().mockResolvedValue([
+      1,
+      [createAdminUser()],
+    ]);
+
+    const result = await usersService.getAdminUsers({
+      page: 1,
+      limit: 20,
+      q: 'user@example.com',
+      role: UserRole.USER,
+      status: UserStatus.ACTIVE,
+    });
+
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        email: 'user@example.com',
+        totalRatings: 3,
+        totalComments: 2,
+      }),
+    );
+    expect(result.meta.total).toBe(1);
+  });
+
+  it('updates a user as admin and rejects self-demotion', async () => {
+    await expectHttpStatus(
+      usersService.updateAdminUser(userId, userId, {
+        role: UserRole.USER,
+      }),
+      HttpStatus.BAD_REQUEST,
+    );
+
+    prismaService.user.update = jest.fn().mockResolvedValue(createAdminUser({
+      displayName: 'Admin Edited',
+      role: UserRole.ADMIN,
+    }));
+
+    const result = await usersService.updateAdminUser(userId, 'a9df9d5a-e55f-403d-a7c5-a85ca65f8176', {
+      displayName: 'Admin Edited',
+      role: UserRole.ADMIN,
+    });
+
+    expect(result.displayName).toBe('Admin Edited');
+    expect(redisService.del).toHaveBeenCalledWith('login_attempts:user@example.com');
+  });
+
+  it('locks and unlocks a user as admin', async () => {
+    prismaService.user.update = jest.fn()
+      .mockResolvedValueOnce(createAdminUser({
+        status: UserStatus.LOCKED,
+        lockedUntil: new Date('2026-01-01T00:30:00.000Z'),
+      }))
+      .mockResolvedValueOnce(createAdminUser({
+        status: UserStatus.ACTIVE,
+        lockedUntil: null,
+      }));
+
+    const locked = await usersService.lockAdminUser(
+      userId,
+      'a9df9d5a-e55f-403d-a7c5-a85ca65f8176',
+      {
+        minutes: 30,
+        reason: 'Policy violation',
+      },
+    );
+    const unlocked = await usersService.unlockAdminUser(
+      userId,
+      'a9df9d5a-e55f-403d-a7c5-a85ca65f8176',
+    );
+
+    expect(locked.status).toBe(UserStatus.LOCKED);
+    expect(unlocked.status).toBe(UserStatus.ACTIVE);
+    expect(prismaService.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId },
+    });
+  });
+
+  it('rejects admin self-lock', async () => {
+    await expectHttpStatus(
+      usersService.lockAdminUser(userId, userId, {
+        minutes: 30,
+      }),
+      HttpStatus.BAD_REQUEST,
+    );
+  });
+
+  it('gets admin dashboard stats', async () => {
+    prismaService.$transaction = jest.fn().mockResolvedValue([6, 12, 4]);
+
+    const result = await usersService.getAdminStats();
+
+    expect(result).toEqual({
+      totalUsers: 6,
+      totalRatings: 12,
+      totalComments: 4,
     });
   });
 });

@@ -12,6 +12,7 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  authInitialized: boolean;
 
   login: (data: LoginData) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
@@ -19,6 +20,7 @@ interface AuthState {
   refreshAccessToken: () => Promise<string>;
   fetchUser: () => Promise<void>;
   setTokens: (access: string, refresh: string) => void;
+  setAuthInitialized: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -29,6 +31,9 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      authInitialized: false,
+
+      setAuthInitialized: () => set({ authInitialized: true }),
 
       setTokens: (access, refresh) => {
         set({ accessToken: access, refreshToken: refresh, isAuthenticated: true });

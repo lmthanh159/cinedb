@@ -6,15 +6,17 @@ export const ROUTES = {
   TV_SHOW: (id: number) => `/tv/${id}`,
   TV_SEASON: (id: number, season: number) => `/tv/${id}/season/${season}`,
   PEOPLE: '/people',
-  PERSON: (id: number) => `/people/${id}`,
+  PERSON: (id: number) => `/person/${id}`,
   SEARCH: '/search',
   LOGIN: '/login',
   REGISTER: '/register',
   FORGOT_PASSWORD: '/forgot-password',
+  VERIFY_EMAIL: '/verify-email',
   PROFILE: '/profile',
   WATCHLIST: '/watchlist',
   FAVORITES: '/favorites',
   RATINGS: '/ratings',
+  ACTIVITY: '/activity',
   ADMIN: '/admin',
 } as const;
 

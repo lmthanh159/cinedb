@@ -62,7 +62,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
 
   const strength = getStrength(password);
   const { label: strengthLabel, bars: strengthBars, color: strengthColor } = STRENGTH_CONFIG[strength];
@@ -90,29 +89,11 @@ export default function RegisterPage() {
 
     try {
       await register({ displayName: displayName.trim(), email: email.trim(), password });
-      setSuccess(true);
+      router.push(`${ROUTES.VERIFY_EMAIL}?email=${encodeURIComponent(email.trim())}`);
     } catch (err) {
       setError(getApiError(err));
     }
   };
-
-  if (success) {
-    return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md rounded-xl bg-slate-800 p-8 text-center shadow-xl">
-          <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-emerald-500" />
-          <h2 className="mb-2 text-xl font-bold text-white">Đăng ký thành công!</h2>
-          <p className="mb-6 text-slate-400">
-            Kiểm tra hộp thư <span className="text-white">{email}</span> để xác thực tài khoản của
-            bạn.
-          </p>
-          <Button onClick={() => router.push(ROUTES.LOGIN)} className="w-full">
-            Đến trang đăng nhập
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">

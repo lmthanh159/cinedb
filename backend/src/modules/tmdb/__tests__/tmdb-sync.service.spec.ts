@@ -8,7 +8,9 @@ import { RedisService } from '@/redis/redis.service';
 describe('TmdbSyncService', () => {
   const tmdbClientService = {
     getMovie: jest.fn(),
+    getMovieVideos: jest.fn(),
     getTVSeries: jest.fn(),
+    getTVSeriesVideos: jest.fn(),
     getTVSeason: jest.fn(),
     getPopularMovies: jest.fn(),
     getPopularTV: jest.fn(),
@@ -57,6 +59,8 @@ describe('TmdbSyncService', () => {
     },
   } as unknown as PrismaService;
   const redisService = {
+    del: jest.fn(),
+    delPattern: jest.fn(),
     set: jest.fn(),
   } as unknown as RedisService;
   const searchSyncService = {
@@ -103,7 +107,11 @@ describe('TmdbSyncService', () => {
     searchSyncService.syncAll = jest.fn().mockResolvedValue({ movies: 1, tvSeries: 0, people: 2 });
     searchSyncService.syncMovie = jest.fn().mockResolvedValue(undefined);
     searchSyncService.syncSeries = jest.fn().mockResolvedValue(undefined);
+    redisService.del = jest.fn().mockResolvedValue(undefined);
+    redisService.delPattern = jest.fn().mockResolvedValue(undefined);
     redisService.set = jest.fn().mockResolvedValue(undefined);
+    tmdbClientService.getMovieVideos = jest.fn().mockResolvedValue({ results: [] });
+    tmdbClientService.getTVSeriesVideos = jest.fn().mockResolvedValue({ results: [] });
     setupMovieMapping();
     setupSeriesMapping();
   });
@@ -223,6 +231,84 @@ describe('TmdbSyncService', () => {
     expect(prismaService.season.upsert).toHaveBeenCalled();
     expect(searchSyncService.syncSeries).toHaveBeenCalledWith(7);
     expect(searchSyncService.syncSeries).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses English movie videos as fallback when localized trailers are missing', async () => {
+    prismaService.movie.findUnique = jest.fn().mockResolvedValue(null);
+    tmdbClientService.getMovie = jest.fn().mockResolvedValue(movieDetail());
+    tmdbClientService.getMovieVideos = jest.fn().mockResolvedValue({
+      results: [
+        {
+          id: 'en-trailer',
+          name: 'Official Trailer',
+          key: 'fallback-key',
+          site: 'YouTube',
+          type: 'Trailer',
+          official: true,
+          published_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    tmdbMapperService.toTrailers = jest
+      .fn()
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([{ key: 'fallback-key', site: 'YouTube' }]);
+    prismaService.movie.upsert = jest.fn().mockResolvedValue({ id: 5, title: 'Fight Club' });
+    prismaService.movie.update = jest.fn().mockResolvedValue({ id: 5 });
+
+    await syncService.importSingleMovie(550);
+
+    expect(tmdbClientService.getMovieVideos).toHaveBeenCalledWith(550, 'en-US');
+    expect(prismaService.trailer.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ key: 'fallback-key', movieId: 5 })],
+      }),
+    );
+  });
+
+  it('uses English TV videos as fallback when localized trailers are missing', async () => {
+    prismaService.tVSeries.findUnique = jest.fn().mockResolvedValue(null);
+    tmdbClientService.getTVSeries = jest.fn().mockResolvedValue(seriesDetail());
+    tmdbClientService.getTVSeriesVideos = jest.fn().mockResolvedValue({
+      results: [
+        {
+          id: 'en-trailer',
+          name: 'Official Trailer',
+          key: 'fallback-key',
+          site: 'YouTube',
+          type: 'Trailer',
+          official: true,
+          published_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    tmdbClientService.getTVSeason = jest.fn().mockResolvedValue({
+      id: 1,
+      season_number: 1,
+      episodes: [],
+    });
+    tmdbMapperService.toTrailers = jest
+      .fn()
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([{ key: 'fallback-key', site: 'YouTube' }]);
+    prismaService.tVSeries.upsert = jest.fn().mockResolvedValue({ id: 7, title: 'Game of Thrones' });
+    prismaService.tVSeries.update = jest.fn().mockResolvedValue({ id: 7 });
+    prismaService.season.upsert = jest.fn().mockResolvedValue({ id: 70 });
+    prismaService.episode.deleteMany = jest.fn().mockResolvedValue({ count: 0 });
+    prismaService.episode.createMany = jest.fn().mockResolvedValue({ count: 1 });
+
+    await syncService.importSingleTV(1399);
+
+    expect(tmdbClientService.getTVSeriesVideos).toHaveBeenCalledWith(
+      1399,
+      'en-US',
+      'en-US,en,null',
+    );
+    expect(prismaService.trailer.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ key: 'fallback-key', seriesId: 7 })],
+      }),
+    );
   });
 
   it('runs full import and records sync logs', async () => {
@@ -374,14 +460,28 @@ describe('TmdbSyncService', () => {
   });
 
   it('returns paginated sync logs', async () => {
+    const startedAt = new Date('2026-05-16T04:00:00.000Z');
+    const completedAt = new Date('2026-05-16T04:30:00.000Z');
     prismaService.$transaction = jest.fn().mockResolvedValue([
       1,
-      [{ id: 1, syncType: 'FULL_IMPORT', entityType: 'MOVIE' }],
+      [
+        {
+          id: 1,
+          syncType: 'FULL_IMPORT',
+          entityType: 'MOVIE',
+          status: 'COMPLETED_WITH_ERRORS',
+          startedAt,
+          completedAt,
+        },
+      ],
     ]);
 
     const result = await syncService.getSyncLogs({ page: 1, limit: 20 });
 
     expect(result.meta.total).toBe(1);
     expect(result.data[0].syncType).toBe('FULL_IMPORT');
+    expect(result.data[0].status).toBe('COMPLETED_WITH_ERRORS');
+    expect(result.data[0].startedAt).toBe(startedAt);
+    expect(result.data[0].completedAt).toBe(completedAt);
   });
 });

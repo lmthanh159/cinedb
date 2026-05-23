@@ -89,9 +89,21 @@ function LoginContent() {
             />
 
             {error && (
-              <p className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400" role="alert">
-                {error}
-              </p>
+              <div className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400" role="alert">
+                {error.toLowerCase().includes('verify') ? (
+                  <span>
+                    Email chưa được xác thực.{' '}
+                    <Link
+                      href={`${ROUTES.VERIFY_EMAIL}?email=${encodeURIComponent(email.trim())}`}
+                      className="font-medium underline hover:text-red-300"
+                    >
+                      Xác thực ngay
+                    </Link>
+                  </span>
+                ) : (
+                  error
+                )}
+              </div>
             )}
 
             <div className="flex justify-end">

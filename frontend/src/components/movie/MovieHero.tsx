@@ -1,151 +1,183 @@
-'use client';
-
 import Image from 'next/image';
-import { Bookmark, Heart, Play, Star } from 'lucide-react';
 
-import { Badge, Button } from '@/components/ui';
-import { RatingCircle } from '@/components/ui/StarRating';
-import { cn, formatRuntime, formatYear, getImageUrl } from '@/lib/utils';
-import type { MovieDetail } from '@/types';
+import { MovieActions } from '@/components/movie/MovieActions';
+import { formatDate, formatRuntime, formatYear, getImageUrl } from '@/lib/utils';
+import type { CrewMember, MovieDetail } from '@/types';
 
 export interface MovieHeroProps {
   movie: MovieDetail;
-  onRate?: () => void;
-  onWatchlist?: () => void;
-  onFavorite?: () => void;
-  onWatchTrailer?: () => void;
-  className?: string;
 }
 
-export function MovieHero({
-  movie,
-  onRate,
-  onWatchlist,
-  onFavorite,
-  onWatchTrailer,
-  className,
-}: MovieHeroProps) {
-  const hasTrailer = movie.trailers?.some((t) => t.site === 'YouTube') ?? false;
+function getRatingHex(score: number): string {
+  if (score === 0) return '#475569';
+  if (score >= 7) return '#10b981';
+  if (score >= 5) return '#f59e0b';
+  return '#ef4444';
+}
+
+const CIRCUMFERENCE = 144.5;
+
+function ScoreCircle({ score }: { score: number }) {
+  const color = getRatingHex(score);
+  const offset = score > 0 ? CIRCUMFERENCE - (CIRCUMFERENCE * score) / 10 : CIRCUMFERENCE;
+
+  return (
+    <svg width="52" height="52" viewBox="0 0 52 52" aria-label={`Điểm: ${score}`}>
+      <circle cx="26" cy="26" r="23" fill="#0f172a" stroke="#1e293b" strokeWidth="3" />
+      <circle
+        cx="26"
+        cy="26"
+        r="23"
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeDasharray={CIRCUMFERENCE}
+        strokeDashoffset={offset}
+        transform="rotate(-90 26 26)"
+        strokeLinecap="round"
+      />
+      {score > 0 ? (
+        <>
+          <text x="26" y="23" textAnchor="middle" fill={color} fontSize="14" fontWeight="500">
+            {(score * 10).toFixed(0)}
+          </text>
+          <text x="26" y="33" textAnchor="middle" fill="#64748b" fontSize="8">
+            User score
+          </text>
+        </>
+      ) : (
+        <text x="26" y="30" textAnchor="middle" fill={color} fontSize="11" fontWeight="500">
+          NR
+        </text>
+      )}
+    </svg>
+  );
+}
+
+function CrewList({ crew }: { crew: CrewMember[] }) {
+  const jobs = ['Director', 'Writer', 'Producer'];
+  const featured = jobs
+    .map((job) => {
+      const members = crew.filter((c) => c.job === job);
+      return members.length > 0 ? { job, names: members.map((m) => m.person.name) } : null;
+    })
+    .filter((item): item is { job: string; names: string[] } => item !== null)
+    .slice(0, 4);
+
+  if (featured.length === 0) return null;
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2">
+      {featured.map(({ job, names }) => (
+        <div key={job}>
+          <p className="text-sm font-medium text-slate-200">{names.join(', ')}</p>
+          <p className="text-xs text-slate-500">{job}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MovieHero({ movie }: MovieHeroProps) {
+  const score = movie.voteAverage || movie.tmdbVoteAverage || 0;
+  const backdropUrl = movie.backdropUrl ? getImageUrl(movie.backdropUrl, 'w1280') : null;
+  const year = formatYear(movie.releaseDate);
 
   return (
     <section
-      className={cn('relative h-[400px] overflow-hidden md:h-[800px]', className)}
       aria-label={`${movie.title} hero`}
+      className="relative min-h-[300px] md:min-h-[420px]"
+      /* backgroundImage requires inline style — dynamic URL can't be a Tailwind class */
+      style={
+        backdropUrl
+          ? {
+              backgroundImage: `linear-gradient(to right, #0f172aee 38%, #0f172a99 65%, #0f172a33), url(${backdropUrl})`,
+              backgroundPosition: 'center 20%',
+              backgroundSize: 'cover',
+              backgroundRepeat: 'no-repeat',
+            }
+          : { backgroundColor: '#0f172a' }
+      }
     >
-      {/* Backdrop image */}
-      {movie.backdropUrl && (
-        <Image
-          src={getImageUrl(movie.backdropUrl, 'w1280')}
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-center"
-          aria-hidden="true"
-        />
-      )}
+      {/* Bottom fade into page bg */}
+      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-900" />
 
-      {/* Gradient overlays */}
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/50 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 to-transparent" />
-
-      {/* Content */}
-      <div className="absolute bottom-0 left-0 right-0 px-4 pb-8 md:px-8 md:pb-12">
-        <div className="mx-auto flex max-w-7xl items-end gap-6">
-          {/* Poster — desktop only */}
-          <div className="relative hidden h-[270px] w-[180px] flex-shrink-0 overflow-hidden rounded-lg shadow-2xl md:block">
+      <div className="relative flex gap-6 px-7 py-8 md:py-10">
+        {/* Poster — desktop only */}
+        <div className="hidden h-[300px] w-[200px] flex-shrink-0 overflow-hidden rounded-xl border-2 border-white/10 bg-slate-800 md:block">
+          {movie.posterUrl && (
             <Image
               src={getImageUrl(movie.posterUrl, 'w342')}
               alt={movie.title}
-              fill
-              sizes="180px"
-              className="object-cover"
+              width={200}
+              height={300}
+              className="h-full w-full object-cover"
+              priority
+            />
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="flex flex-1 flex-col pt-3">
+          {/* Title */}
+          <h1 className="text-2xl font-semibold text-white md:text-3xl">
+            {movie.title}{' '}
+            {year && <span className="font-normal text-slate-400">({year})</span>}
+          </h1>
+
+          {/* Meta row */}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+            {movie.releaseDate && (
+              <span>{formatDate(movie.releaseDate, 'dd/MM/yyyy')}</span>
+            )}
+            {movie.genres.length > 0 && (
+              <>
+                <span className="text-slate-600">·</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {movie.genres.map((g) => (
+                    <span
+                      key={g.id}
+                      className="rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs text-blue-400"
+                    >
+                      {g.name}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+            {movie.runtime && (
+              <>
+                <span className="text-slate-600">·</span>
+                <span>{formatRuntime(movie.runtime)}</span>
+              </>
+            )}
+          </div>
+
+          {/* Score + actions */}
+          <div className="my-4 flex flex-wrap items-center gap-4">
+            <ScoreCircle score={score} />
+            <MovieActions
+              movieId={movie.id}
+              movieTitle={movie.title}
+              trailers={movie.trailers}
             />
           </div>
 
-          {/* Info */}
-          <div className="flex flex-1 flex-col gap-3 min-w-0">
-            <h1 className="text-3xl font-bold text-white md:text-5xl line-clamp-2">
-              {movie.title}
-            </h1>
+          {/* Tagline */}
+          {movie.tagline && (
+            <p className="mb-2 text-sm italic text-slate-500">{movie.tagline}</p>
+          )}
 
-            {movie.tagline && (
-              <p className="text-slate-300 italic text-sm md:text-base">{movie.tagline}</p>
-            )}
-
-            {/* Genres */}
-            {movie.genres.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {movie.genres.map((g) => (
-                  <Badge key={g.id} variant="genre">
-                    {g.name}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {/* Meta row */}
-            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
-              {movie.releaseDate && <span>{formatYear(movie.releaseDate)}</span>}
-              {movie.runtime && <span>{formatRuntime(movie.runtime)}</span>}
-              {movie.language && (
-                <span className="rounded border border-slate-600 px-1.5 py-0.5 text-xs uppercase">
-                  {movie.language}
-                </span>
-              )}
-              <RatingCircle value={movie.voteAverage} size={52} />
+          {/* Overview */}
+          {movie.overview && (
+            <div>
+              <h3 className="mb-1 text-base font-medium text-slate-200">Overview</h3>
+              <p className="max-w-xl leading-relaxed text-slate-300">{movie.overview}</p>
             </div>
+          )}
 
-            {/* Overview — desktop only */}
-            {movie.overview && (
-              <p className="hidden max-w-2xl text-sm leading-relaxed text-slate-300 line-clamp-3 md:block">
-                {movie.overview}
-              </p>
-            )}
-
-            {/* Action buttons */}
-            <div className="flex flex-wrap gap-3 pt-1">
-              {(hasTrailer || onWatchTrailer) && (
-                <Button
-                  onClick={onWatchTrailer}
-                  leftIcon={<Play className="h-4 w-4 fill-current" />}
-                  size="lg"
-                >
-                  Watch Trailer
-                </Button>
-              )}
-              {onRate && (
-                <Button
-                  variant="secondary"
-                  onClick={onRate}
-                  leftIcon={<Star className="h-4 w-4" />}
-                  size="lg"
-                >
-                  Rate
-                </Button>
-              )}
-              {onWatchlist && (
-                <Button
-                  variant="secondary"
-                  onClick={onWatchlist}
-                  leftIcon={<Bookmark className="h-4 w-4" />}
-                  size="lg"
-                >
-                  Watchlist
-                </Button>
-              )}
-              {onFavorite && (
-                <Button
-                  variant="secondary"
-                  onClick={onFavorite}
-                  leftIcon={<Heart className="h-4 w-4" />}
-                  size="lg"
-                >
-                  Favorite
-                </Button>
-              )}
-            </div>
-          </div>
+          {/* Key crew */}
+          <CrewList crew={movie.crew} />
         </div>
       </div>
     </section>

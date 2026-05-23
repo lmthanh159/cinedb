@@ -22,6 +22,11 @@ class RatedMediaEntity {
   posterUrl!: string | null;
 }
 
+class AdminCommentUserEntity extends UserSummaryEntity {
+  @ApiProperty()
+  email!: string;
+}
+
 class PaginationMetaEntity {
   @ApiProperty()
   page!: number;
@@ -110,6 +115,49 @@ export class CommentResponseEntity {
 
   @ApiProperty()
   updatedAt!: Date;
+}
+
+export class AdminCommentEntity {
+  @ApiProperty()
+  id!: number;
+
+  @ApiProperty()
+  content!: string;
+
+  @ApiProperty()
+  status!: string;
+
+  @ApiPropertyOptional()
+  movieId!: number | null;
+
+  @ApiPropertyOptional()
+  seriesId!: number | null;
+
+  @ApiProperty({ type: AdminCommentUserEntity })
+  user!: AdminCommentUserEntity;
+
+  @ApiPropertyOptional({ type: RatedMediaEntity })
+  movie!: RatedMediaEntity | null;
+
+  @ApiPropertyOptional({ type: RatedMediaEntity })
+  series!: RatedMediaEntity | null;
+
+  @ApiProperty()
+  reportCount!: number;
+
+  @ApiProperty()
+  createdAt!: Date;
+
+  @ApiProperty()
+  updatedAt!: Date;
+}
+
+export class AdminCommentListResponseEntity {
+  @ApiProperty({ type: [AdminCommentEntity] })
+  data!: AdminCommentEntity[];
+
+  @ApiProperty({ type: PaginationMetaEntity })
+  meta!: PaginationMetaEntity;
 }
 
 export class ReportResponseEntity {

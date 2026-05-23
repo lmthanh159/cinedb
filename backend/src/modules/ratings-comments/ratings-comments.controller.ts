@@ -24,15 +24,21 @@ import {
 } from '@nestjs/swagger';
 
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { RolesGuard } from '@/common/guards/roles.guard';
 import type { AuthenticatedUser } from '@/modules/auth/auth.types';
 import { MessageResponseEntity } from '@/modules/auth/entities/auth-response.entity';
 import { CreateCommentDto } from '@/modules/ratings-comments/dto/create-comment.dto';
 import { CreateRatingDto } from '@/modules/ratings-comments/dto/create-rating.dto';
+import { ModerateCommentDto } from '@/modules/ratings-comments/dto/moderate-comment.dto';
+import { QueryAdminCommentsDto } from '@/modules/ratings-comments/dto/query-admin-comments.dto';
 import { QueryRatingDto } from '@/modules/ratings-comments/dto/query-rating.dto';
 import { ReportCommentDto } from '@/modules/ratings-comments/dto/report-comment.dto';
 import { UpdateCommentDto } from '@/modules/ratings-comments/dto/update-comment.dto';
 import {
+  AdminCommentEntity,
+  AdminCommentListResponseEntity,
   CommentResponseEntity,
   MyRatingsResponseEntity,
   RatingResponseEntity,
@@ -109,6 +115,81 @@ export class RatingsController {
     @Query() query: QueryRatingDto,
   ) {
     return this.ratingsCommentsService.getMyRatings(user.userId, query);
+  }
+}
+
+@ApiTags('Admin - Comments')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+@Controller('admin/comments')
+export class AdminCommentsController {
+  constructor(private readonly ratingsCommentsService: RatingsCommentsService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get paginated comments for admin moderation' })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: 'status', required: false, enum: ['ACTIVE', 'HIDDEN', 'DELETED'] })
+  @ApiQuery({ name: 'q', required: false, example: 'Great movie' })
+  @ApiQuery({ name: 'reportedOnly', required: false, example: true })
+  @ApiQuery({ name: 'userId', required: false })
+  @ApiQuery({ name: 'movieId', required: false, example: 1 })
+  @ApiQuery({ name: 'seriesId', required: false, example: 1 })
+  @ApiOkResponse({ type: AdminCommentListResponseEntity })
+  async getComments(@Query() query: QueryAdminCommentsDto) {
+    return this.ratingsCommentsService.getAdminComments(query);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Moderate a comment status or content as admin' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiBody({ type: ModerateCommentDto })
+  @ApiOkResponse({ type: AdminCommentEntity })
+  async moderateComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) commentId: number,
+    @Body() dto: ModerateCommentDto,
+  ) {
+    return this.ratingsCommentsService.moderateComment(user.userId, commentId, dto);
+  }
+
+  @Post(':id/hide')
+  @ApiOperation({ summary: 'Hide a comment as admin' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiBody({ type: ModerateCommentDto })
+  @ApiOkResponse({ type: AdminCommentEntity })
+  async hideComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) commentId: number,
+    @Body() dto: ModerateCommentDto,
+  ) {
+    return this.ratingsCommentsService.hideComment(user.userId, commentId, dto);
+  }
+
+  @Post(':id/restore')
+  @ApiOperation({ summary: 'Restore a hidden or deleted comment as admin' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiBody({ type: ModerateCommentDto })
+  @ApiOkResponse({ type: AdminCommentEntity })
+  async restoreComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) commentId: number,
+    @Body() dto: ModerateCommentDto,
+  ) {
+    return this.ratingsCommentsService.restoreComment(user.userId, commentId, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Soft delete a comment as admin' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiOkResponse({ type: AdminCommentEntity })
+  async deleteComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) commentId: number,
+  ) {
+    return this.ratingsCommentsService.deleteAdminComment(user.userId, commentId);
   }
 }
 

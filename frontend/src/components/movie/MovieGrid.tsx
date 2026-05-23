@@ -6,6 +6,7 @@ import { MovieCard } from './MovieCard';
 
 export interface MovieGridProps {
   movies: MovieSummary[];
+  mediaType?: 'movie' | 'tv';
   isLoading?: boolean;
   skeletonCount?: number;
   onWatchlist?: (id: number) => void;
@@ -15,6 +16,7 @@ export interface MovieGridProps {
 
 export function MovieGrid({
   movies,
+  mediaType = 'movie',
   isLoading,
   skeletonCount = 10,
   onWatchlist,
@@ -42,6 +44,7 @@ export function MovieGrid({
         <MovieCard
           key={movie.id}
           movie={movie}
+          mediaType={mediaType}
           onWatchlist={onWatchlist}
           onFavorite={onFavorite}
         />

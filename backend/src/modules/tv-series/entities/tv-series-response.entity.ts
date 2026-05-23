@@ -254,6 +254,39 @@ export class TvVideosResponseEntity {
   results!: TvTrailerEntity[];
 }
 
+export class TvReviewsUserEntity {
+  @ApiProperty({ example: '15363e81-dde7-4882-a196-cce0a6aa471c' })
+  id!: string;
+
+  @ApiProperty({ example: 'CineDB User' })
+  displayName!: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/avatar.jpg', nullable: true })
+  avatarUrl?: string | null;
+}
+
+export class TvReviewEntity {
+  @ApiProperty({ example: 8 })
+  rating!: number;
+
+  @ApiPropertyOptional({ example: 'A strong season with excellent pacing.', nullable: true })
+  comment?: string | null;
+
+  @ApiProperty({ type: TvReviewsUserEntity })
+  user!: TvReviewsUserEntity;
+
+  @ApiProperty({ example: '2026-05-14T10:00:00.000Z' })
+  createdAt!: Date;
+}
+
+export class TvReviewsResponseEntity {
+  @ApiProperty({ type: [TvReviewEntity] })
+  data!: TvReviewEntity[];
+
+  @ApiProperty({ type: TvPaginationMetaEntity })
+  meta!: TvPaginationMetaEntity;
+}
+
 export class EpisodeResponseEntity {
   @ApiProperty({ example: 1 })
   episodeNumber!: number;

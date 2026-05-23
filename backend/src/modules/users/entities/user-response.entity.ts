@@ -72,6 +72,39 @@ export class UserProfileEntity {
   updatedAt!: Date;
 }
 
+export class AdminUserEntity extends UserProfileEntity {
+  @ApiPropertyOptional()
+  lockedUntil!: Date | null;
+
+  @ApiProperty()
+  loginAttempts!: number;
+
+  @ApiProperty()
+  totalRatings!: number;
+
+  @ApiProperty()
+  totalComments!: number;
+}
+
+export class AdminUserListResponseEntity {
+  @ApiProperty({ type: [AdminUserEntity] })
+  data!: AdminUserEntity[];
+
+  @ApiProperty({ type: PaginationMetaEntity })
+  meta!: PaginationMetaEntity;
+}
+
+export class AdminStatsEntity {
+  @ApiProperty()
+  totalUsers!: number;
+
+  @ApiProperty()
+  totalRatings!: number;
+
+  @ApiProperty()
+  totalComments!: number;
+}
+
 export class ToggleResponseEntity {
   @ApiProperty()
   added!: boolean;

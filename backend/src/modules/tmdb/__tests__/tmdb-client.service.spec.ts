@@ -118,6 +118,7 @@ describe('TmdbClientService', () => {
     await tmdbClientService.searchMovies('batman', 6);
     await tmdbClientService.getMovieChanges('2026-05-01', '2026-05-15', 7);
     await tmdbClientService.getTVChanges('2026-05-01', '2026-05-15', 8);
+    await tmdbClientService.getMovieVideos(550, 'en-US');
 
     expect(httpClient.get).toHaveBeenNthCalledWith(1, '/movie/popular', {
       params: { page: 2 },
@@ -148,12 +149,16 @@ describe('TmdbClientService', () => {
         start_date: '2026-05-01',
       },
     });
+    expect(httpClient.get).toHaveBeenNthCalledWith(8, '/movie/550/videos', {
+      params: { language: 'en-US' },
+    });
   });
 
   it('maps TV, people, genre, and trending methods to TMDB paths', async () => {
     httpClient.get = jest
       .fn()
       .mockResolvedValueOnce({ data: { id: 1399, name: 'Game of Thrones' } })
+      .mockResolvedValueOnce({ data: { results: [] } })
       .mockResolvedValueOnce({ data: paginatedResponse() })
       .mockResolvedValueOnce({ data: { id: 1, season_number: 1, episodes: [] } })
       .mockResolvedValueOnce({ data: paginatedResponse() })
@@ -164,6 +169,7 @@ describe('TmdbClientService', () => {
       .mockResolvedValueOnce({ data: paginatedResponse() });
 
     await tmdbClientService.getTVSeries(1399, 'credits');
+    await tmdbClientService.getTVSeriesVideos(1399, 'en-US', 'en-US,en,null');
     await tmdbClientService.getPopularTV(2);
     await tmdbClientService.getTVSeason(1399, 1);
     await tmdbClientService.searchTV('dark', 3);
@@ -178,13 +184,19 @@ describe('TmdbClientService', () => {
     expect(httpClient.get).toHaveBeenNthCalledWith(1, '/tv/1399', {
       params: { append_to_response: 'credits' },
     });
-    expect(httpClient.get).toHaveBeenNthCalledWith(3, '/tv/1399/season/1', {
+    expect(httpClient.get).toHaveBeenNthCalledWith(2, '/tv/1399/videos', {
+      params: {
+        include_video_language: 'en-US,en,null',
+        language: 'en-US',
+      },
+    });
+    expect(httpClient.get).toHaveBeenNthCalledWith(4, '/tv/1399/season/1', {
       params: {},
     });
-    expect(httpClient.get).toHaveBeenNthCalledWith(5, '/person/31', {
+    expect(httpClient.get).toHaveBeenNthCalledWith(6, '/person/31', {
       params: { append_to_response: 'movie_credits' },
     });
-    expect(httpClient.get).toHaveBeenNthCalledWith(9, '/trending/movie/day', {
+    expect(httpClient.get).toHaveBeenNthCalledWith(10, '/trending/movie/day', {
       params: {},
     });
   });

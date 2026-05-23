@@ -14,9 +14,9 @@ import { useAuthStore } from '@/store/auth-store';
 import { SearchBar } from './SearchBar';
 
 const NAV_LINKS = [
-  { label: 'Movies', href: ROUTES.MOVIES },
+  { label: 'Phim', href: ROUTES.MOVIES },
   { label: 'TV Shows', href: ROUTES.TV },
-  { label: 'People', href: ROUTES.PEOPLE },
+  { label: 'Diễn viên', href: ROUTES.PEOPLE },
 ];
 
 export interface HeaderProps {
@@ -98,12 +98,12 @@ export function Header({ className }: HeaderProps) {
           ) : (
             <>
               <Link href={ROUTES.LOGIN}>
-                <Button variant="ghost" size="sm" leftIcon={<LogIn className="h-4 w-4" />}>
-                  Sign in
+                <Button size="sm" leftIcon={<LogIn className="h-4 w-4" />} className="rounded-full bg-blue-500 hover:bg-blue-600">
+                  Đăng nhập
                 </Button>
               </Link>
               <Link href={ROUTES.REGISTER} className="hidden sm:block">
-                <Button size="sm">Register</Button>
+                <Button variant="ghost" size="sm" className="rounded-full">Đăng ký</Button>
               </Link>
             </>
           )}

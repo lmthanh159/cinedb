@@ -13,6 +13,7 @@ import { MovieCard } from './MovieCard';
 export interface MovieCarouselProps {
   title: string;
   movies: MovieSummary[];
+  mediaType?: 'movie' | 'tv';
   viewAllLink?: string;
   isLoading?: boolean;
   skeletonCount?: number;
@@ -24,6 +25,7 @@ export interface MovieCarouselProps {
 export function MovieCarousel({
   title,
   movies,
+  mediaType = 'movie',
   viewAllLink,
   isLoading,
   skeletonCount = 6,
@@ -54,7 +56,7 @@ export function MovieCarousel({
               href={viewAllLink}
               className="text-sm text-blue-400 transition-colors hover:text-blue-300"
             >
-              See All
+              Xem tất cả
             </Link>
           )}
 
@@ -85,14 +87,15 @@ export function MovieCarousel({
       >
         {isLoading
           ? Array.from({ length: skeletonCount }).map((_, i) => (
-              <div key={i} className="w-[160px] flex-shrink-0 snap-start">
+              <div key={i} className="w-[120px] flex-shrink-0 snap-start">
                 <MovieCardSkeleton />
               </div>
             ))
           : movies.map((movie) => (
-              <div key={movie.id} className="w-[160px] flex-shrink-0 snap-start">
+              <div key={movie.id} className="w-[120px] flex-shrink-0 snap-start">
                 <MovieCard
                   movie={movie}
+                  mediaType={mediaType}
                   onWatchlist={onWatchlist}
                   onFavorite={onFavorite}
                 />

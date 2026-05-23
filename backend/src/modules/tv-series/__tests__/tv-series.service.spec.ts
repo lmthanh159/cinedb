@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
+import { TvReviewsSortBy } from '@/modules/tv-series/dto/tv-reviews-query.dto';
 import {
   TvSeriesCategory,
   TvSeriesSortBy,
@@ -33,6 +34,13 @@ describe('TvSeriesService', () => {
       update: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
+    },
+    rating: {
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    comment: {
+      findMany: jest.fn(),
     },
     genre: {
       count: jest.fn(),
@@ -249,6 +257,71 @@ describe('TvSeriesService', () => {
     const result = await tvSeriesService.getSimilarTvSeries(1);
 
     expect(result.data).toHaveLength(2);
+  });
+
+  it('gets paginated TV reviews merged with active comments', async () => {
+    prismaService.tVSeries.findFirst = jest.fn().mockResolvedValue({ id: 1 });
+    prismaService.$transaction = jest.fn().mockResolvedValue([
+      1,
+      [
+        {
+          id: 101,
+          userId: 'user-1',
+          score: 9,
+          createdAt: new Date('2026-05-23T00:00:00.000Z'),
+          user: {
+            id: 'user-1',
+            displayName: 'TV Fan',
+            avatarUrl: null,
+          },
+        },
+      ],
+    ]);
+    prismaService.comment.findMany = jest.fn().mockResolvedValue([
+      {
+        userId: 'user-1',
+        content: 'Excellent pilot.',
+      },
+    ]);
+
+    const result = await tvSeriesService.getTvSeriesReviews(1, {
+      page: 1,
+      limit: 10,
+      sort_by: TvReviewsSortBy.CREATED_AT,
+      sort_order: TvSortOrder.DESC,
+    });
+
+    expect(result).toEqual({
+      data: [
+        {
+          rating: 9,
+          comment: 'Excellent pilot.',
+          user: {
+            id: 'user-1',
+            displayName: 'TV Fan',
+            avatarUrl: null,
+          },
+          createdAt: new Date('2026-05-23T00:00:00.000Z'),
+        },
+      ],
+      meta: {
+        page: 1,
+        limit: 10,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+    expect(prismaService.comment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          seriesId: 1,
+          status: 'ACTIVE',
+          userId: {
+            in: ['user-1'],
+          },
+        },
+      }),
+    );
   });
 
   it('returns empty similar series when no source signals exist', async () => {

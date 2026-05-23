@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 
-import { GenresController } from '@/modules/genres/genres.controller';
+import {
+  AdminGenresController,
+  GenresController,
+} from '@/modules/genres/genres.controller';
 import { GenresService } from '@/modules/genres/genres.service';
 
 @Module({
-  controllers: [GenresController],
+  controllers: [GenresController, AdminGenresController],
   providers: [GenresService],
   exports: [GenresService],
 })

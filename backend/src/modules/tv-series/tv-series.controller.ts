@@ -30,6 +30,7 @@ import { MessageResponseEntity } from '@/modules/auth/entities/auth-response.ent
 import { CreateEpisodeDto } from '@/modules/tv-series/dto/create-episode.dto';
 import { CreateSeasonDto } from '@/modules/tv-series/dto/create-season.dto';
 import { CreateTvSeriesDto } from '@/modules/tv-series/dto/create-tv-series.dto';
+import { TvReviewsQueryDto } from '@/modules/tv-series/dto/tv-reviews-query.dto';
 import { TvSeriesQueryDto } from '@/modules/tv-series/dto/tv-series-query.dto';
 import { UpdateEpisodeDto } from '@/modules/tv-series/dto/update-episode.dto';
 import { UpdateSeasonDto } from '@/modules/tv-series/dto/update-season.dto';
@@ -38,6 +39,7 @@ import {
   EpisodeResponseEntity,
   SeasonDetailResponseEntity,
   TvCreditsResponseEntity,
+  TvReviewsResponseEntity,
   TvSeriesDetailResponseEntity,
   TvSeriesListResponseEntity,
   TvVideosResponseEntity,
@@ -103,6 +105,21 @@ export class TvSeriesController {
   })
   async getSimilarTvSeries(@Param('id', ParseIntPipe) id: number) {
     return this.tvSeriesService.getSimilarTvSeries(id);
+  }
+
+  @Get(':id/reviews')
+  @ApiOperation({ summary: 'Get TV reviews merged from ratings and active comments' })
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 10 })
+  @ApiQuery({ name: 'sort_by', required: false, enum: ['created_at', 'score'] })
+  @ApiQuery({ name: 'sort_order', required: false, enum: ['asc', 'desc'] })
+  @ApiOkResponse({ type: TvReviewsResponseEntity })
+  async getTvSeriesReviews(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: TvReviewsQueryDto,
+  ) {
+    return this.tvSeriesService.getTvSeriesReviews(id, query);
   }
 
   @Get(':id/season/:seasonNumber')

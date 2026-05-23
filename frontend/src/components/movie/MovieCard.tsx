@@ -11,35 +11,45 @@ import type { MovieSummary } from '@/types';
 
 export interface MovieCardProps {
   movie: MovieSummary;
+  mediaType?: 'movie' | 'tv';
   onWatchlist?: (id: number) => void;
   onFavorite?: (id: number) => void;
   className?: string;
 }
 
-export function MovieCard({ movie, onWatchlist, onFavorite, className }: MovieCardProps) {
+export function MovieCard({ movie, mediaType = 'movie', onWatchlist, onFavorite, className }: MovieCardProps) {
   const hasActions = onWatchlist ?? onFavorite;
+  const href = mediaType === 'tv' ? ROUTES.TV_SHOW(movie.id) : ROUTES.MOVIE(movie.id);
 
   return (
-    <Link href={ROUTES.MOVIE(movie.id)} className={cn('group relative block', className)}>
+    <Link href={href} className={cn('group relative block', className)}>
       {/* Poster */}
-      <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-slate-800">
+      <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-slate-800 transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-black/60">
         <Image
           src={getImageUrl(movie.posterUrl, 'w342')}
           alt={movie.title}
           fill
           sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
-          className="object-cover transition-transform duration-300 group-hover:scale-105"
+          className="object-cover"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
         />
 
         {/* Hover gradient */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
 
-        {/* Rating circle — always visible, bottom-left */}
-        <div className="absolute bottom-2 left-2">
-          <RatingCircle value={movie.voteAverage} size={40} />
+        {/* Rating badge — top-right */}
+        <div className="absolute right-2 top-2">
+          <RatingCircle
+            value={movie.voteAverage}
+            tmdbValue={movie.tmdbVoteAverage}
+            size={32}
+            className="ring-2 ring-slate-900"
+          />
         </div>
 
-        {/* Action buttons — appear on hover, bottom-right */}
+        {/* Action buttons — appear on hover */}
         {hasActions && (
           <div className="absolute bottom-2 right-2 flex flex-col gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             {onWatchlist && (
@@ -77,7 +87,7 @@ export function MovieCard({ movie, onWatchlist, onFavorite, className }: MovieCa
         <p className="line-clamp-1 text-sm font-medium text-white transition-colors group-hover:text-blue-400">
           {movie.title}
         </p>
-        <p className="text-xs text-slate-400">{formatYear(movie.releaseDate)}</p>
+        <p className="text-xs text-slate-500">{formatYear(movie.releaseDate)}</p>
       </div>
     </Link>
   );

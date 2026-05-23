@@ -25,6 +25,7 @@ import {
   TmdbTimeWindow,
   TmdbTVDetail,
   TmdbTVSeries,
+  TmdbVideos,
 } from '@/modules/tmdb/interfaces/tmdb.interface';
 import { TmdbApiException } from '@/modules/tmdb/tmdb-api.exception';
 import { RedisService } from '@/redis/redis.service';
@@ -83,6 +84,15 @@ export class TmdbClientService {
     });
   }
 
+  async getMovieVideos(
+    tmdbId: number,
+    language = 'en-US',
+  ): Promise<TmdbVideos> {
+    return this.get<TmdbVideos>(`/movie/${tmdbId}/videos`, {
+      language,
+    });
+  }
+
   async getPopularMovies(page: number): Promise<TmdbPaginatedResponse<TmdbMovie>> {
     return this.get<TmdbPaginatedResponse<TmdbMovie>>('/movie/popular', { page });
   }
@@ -136,6 +146,17 @@ export class TmdbClientService {
   ): Promise<TmdbTVDetail> {
     return this.get<TmdbTVDetail>(`/tv/${tmdbId}`, {
       append_to_response: appendToResponse,
+    });
+  }
+
+  async getTVSeriesVideos(
+    tmdbId: number,
+    language = 'en-US',
+    includeVideoLanguage = 'en-US,en,null',
+  ): Promise<TmdbVideos> {
+    return this.get<TmdbVideos>(`/tv/${tmdbId}/videos`, {
+      include_video_language: includeVideoLanguage,
+      language,
     });
   }
 

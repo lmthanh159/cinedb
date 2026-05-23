@@ -8,17 +8,21 @@ import { ROUTES } from '@/lib/constants';
 import { useAuthStore } from '@/store/auth-store';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, authInitialized } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    // Wait until the initial token-refresh check is done before deciding to redirect.
+    // Without this guard, the redirect fires immediately on first render when
+    // isAuthenticated is still false (state not yet hydrated from the refresh flow).
+    if (!authInitialized || isLoading) return;
+    if (!isAuthenticated) {
       router.push(`${ROUTES.LOGIN}?redirect=${encodeURIComponent(pathname)}`);
     }
-  }, [isAuthenticated, isLoading, router, pathname]);
+  }, [authInitialized, isAuthenticated, isLoading, router, pathname]);
 
-  if (isLoading) return <MovieDetailSkeleton />;
+  if (!authInitialized || isLoading) return <MovieDetailSkeleton />;
   if (!isAuthenticated) return null;
   return <>{children}</>;
 }

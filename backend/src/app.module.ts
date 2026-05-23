@@ -5,6 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
+import { AdminDashboardModule } from '@/modules/admin-dashboard/admin-dashboard.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { GenresModule } from '@/modules/genres/genres.module';
 import { HealthModule } from '@/modules/health/health.module';
@@ -47,6 +48,7 @@ import { RedisModule } from '@/redis/redis.module';
     TrendingModule,
     GenresModule,
     TmdbModule,
+    AdminDashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

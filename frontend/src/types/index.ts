@@ -309,6 +309,7 @@ export interface ReviewUser {
 }
 
 export interface Review {
+  id?: number;
   rating: number;
   comment: string | null;
   user: ReviewUser;
@@ -412,6 +413,8 @@ export interface TrendingItem {
   mediaType: 'movie' | 'tv';
   releaseDate: string | null;
   firstAirDate: string | null;
+  overview?: string | null;
+  runtime?: number | null;
   posterUrl: string | null;
   backdropUrl: string | null;
   voteAverage: number;
@@ -443,6 +446,75 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+export interface TmdbSyncLog {
+  id: number;
+  syncType: string;
+  entityType: string;
+  totalProcessed: number;
+  totalCreated: number;
+  totalUpdated: number;
+  totalErrors: number;
+  startedAt: string;
+  completedAt: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface TmdbImportStats {
+  totalProcessed: number;
+  totalCreated: number;
+  totalUpdated: number;
+  totalErrors: number;
+}
+
+export interface TmdbFullImportResult {
+  movies: TmdbImportStats;
+  tvSeries: TmdbImportStats;
+}
+
+export interface TmdbMovieSearchResult {
+  id: number;
+  title: string;
+  original_title: string;
+  overview: string | null;
+  release_date: string | null;
+  poster_path: string | null;
+  vote_average: number;
+  vote_count: number;
+  popularity: number;
+}
+
+export interface TmdbTvSearchResult {
+  id: number;
+  name: string;
+  original_name: string;
+  overview: string | null;
+  first_air_date: string | null;
+  poster_path: string | null;
+  vote_average: number;
+  vote_count: number;
+  popularity: number;
+}
+
+export interface TmdbPaginatedResult<T> {
+  page: number;
+  results: T[];
+  total_pages: number;
+  total_results: number;
+}
+
+export interface SyncLogsResponse {
+  data: TmdbSyncLog[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   meta: PaginationMeta;
@@ -465,4 +537,129 @@ export interface ActivityItem {
   series: MediaStub | null;
   score: number | null;
   createdAt: string;
+}
+
+// ─── Admin — Users ────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  role: 'USER' | 'ADMIN';
+  status: 'ACTIVE' | 'LOCKED' | 'UNVERIFIED';
+  emailVerified: boolean;
+  language: string;
+  lockedUntil: string | null;
+  loginAttempts: number;
+  totalRatings: number;
+  totalComments: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUsersResponse {
+  data: AdminUser[];
+  meta: PaginationMeta;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  totalRatings: number;
+  totalComments: number;
+}
+
+// ─── Admin — Comments ─────────────────────────────────────────────────────────
+
+export interface AdminComment {
+  id: number;
+  content: string;
+  status: 'ACTIVE' | 'HIDDEN' | 'DELETED';
+  movieId: number | null;
+  seriesId: number | null;
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    avatarUrl: string | null;
+  };
+  movie: { id: number; title: string; posterUrl: string | null } | null;
+  series: { id: number; title: string; posterUrl: string | null } | null;
+  reportCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminCommentsResponse {
+  data: AdminComment[];
+  meta: PaginationMeta;
+}
+
+// ─── Admin — Charts ───────────────────────────────────────────────────────────
+
+export interface RatingsChartPoint {
+  date: string;
+  totalRatings: number;
+  averageScore: number | null;
+}
+
+export interface TopMovieChartItem {
+  id: number;
+  title: string;
+  posterUrl: string | null;
+  releaseDate: string | null;
+  voteAverage: number;
+  voteCount: number;
+  totalRatings: number;
+  averageScore: number;
+}
+
+export interface GenreDistributionItem {
+  id: number;
+  name: string;
+  slug: string;
+  movieCount: number;
+  tvCount: number;
+  totalCount: number;
+}
+
+// ─── Admin — People ───────────────────────────────────────────────────────────
+
+export interface AdminPerson {
+  id: number;
+  tmdbId: number | null;
+  name: string;
+  originalName: string | null;
+  biography: string | null;
+  birthday: string | null;
+  deathday: string | null;
+  placeOfBirth: string | null;
+  gender: 'UNKNOWN' | 'FEMALE' | 'MALE' | 'NON_BINARY';
+  profileUrl: string | null;
+  popularity: number;
+  knownForDepartment: string | null;
+}
+
+export interface AdminPeopleResponse {
+  data: AdminPerson[];
+  meta: PaginationMeta;
+}
+
+// ─── Admin — Genres ───────────────────────────────────────────────────────────
+
+export interface AdminGenre {
+  id: number;
+  tmdbId: number | null;
+  name: string;
+  slug: string;
+  movieCount: number;
+  tvCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminGenresResponse {
+  data: AdminGenre[];
+  meta: PaginationMeta;
 }

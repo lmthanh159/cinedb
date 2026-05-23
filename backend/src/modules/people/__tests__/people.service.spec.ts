@@ -1,6 +1,10 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { GenderType } from '@prisma/client';
 
+import {
+  AdminPersonSortBy,
+  AdminPersonSortOrder,
+} from '@/modules/people/dto/admin-person-query.dto';
 import { PeopleService } from '@/modules/people/people.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
@@ -87,6 +91,36 @@ describe('PeopleService', () => {
 
     expect(result.data).toHaveLength(2);
     expect(result.meta.totalPages).toBe(1);
+  });
+
+  it('gets admin people with search and sorting', async () => {
+    prismaService.$transaction = jest.fn().mockResolvedValue([
+      1,
+      [createPerson()],
+    ]);
+
+    const result = await peopleService.getAdminPeople({
+      page: 1,
+      limit: 20,
+      q: 'Sample',
+      sort_by: AdminPersonSortBy.NAME,
+      sort_order: AdminPersonSortOrder.ASC,
+    });
+
+    expect(result.data[0].name).toBe('Sample Person');
+    expect(result.meta.total).toBe(1);
+    expect(prismaService.person.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        OR: expect.any(Array),
+      }),
+    });
+    expect(prismaService.person.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+    );
   });
 
   it('returns cached person detail on cache hit', async () => {

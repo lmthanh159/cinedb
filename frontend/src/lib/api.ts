@@ -1,6 +1,15 @@
 import axios from 'axios';
 
 import type {
+  AdminComment,
+  AdminCommentsResponse,
+  AdminGenre,
+  AdminGenresResponse,
+  AdminPerson,
+  AdminPeopleResponse,
+  AdminStats,
+  AdminUser,
+  AdminUsersResponse,
   ApiResponse,
   AuthTokens,
   AutocompleteResult,
@@ -11,6 +20,7 @@ import type {
   Episode,
   FavoriteItem,
   FavoriteToggleResponse,
+  GenreDistributionItem,
   LoginData,
   MediaImage,
   MovieDetail,
@@ -24,10 +34,12 @@ import type {
   PersonTvCredits,
   RateMovieResponse,
   RateTvResponse,
+  RatingsChartPoint,
   RegisterData,
   Review,
   SearchResult,
   Season,
+  TopMovieChartItem,
   Trailer,
   TrendingItem,
   TrendingMediaType,
@@ -35,10 +47,17 @@ import type {
   TvDetail,
   TvQueryParams,
   TvSummary,
+  ActivityItem,
   UserProfile,
   UserRating,
   WatchlistItem,
   WatchlistToggleResponse,
+  SyncLogsResponse,
+  TmdbFullImportResult,
+  TmdbImportStats,
+  TmdbMovieSearchResult,
+  TmdbPaginatedResult,
+  TmdbTvSearchResult,
 } from '@/types';
 
 const api = axios.create({
@@ -113,6 +132,9 @@ export const authApi = {
 
   changePassword: (oldPassword: string, newPassword: string) =>
     api.post<ApiResponse<{ message: string }>>('/auth/change-password', { oldPassword, newPassword }),
+
+  verifyEmail: (token: string) =>
+    api.get<ApiResponse<{ message: string }>>('/auth/verify-email', { params: { token } }),
 };
 
 // ─── Movies ───────────────────────────────────────────────────────────────────
@@ -269,6 +291,131 @@ export const userApi = {
 
   getRatings: (params?: PaginationParams) =>
     api.get<PaginatedResponse<UserRating>>('/users/me/ratings', { params }),
+
+  getActivity: (params?: PaginationParams) =>
+    api.get<PaginatedResponse<ActivityItem>>('/users/me/activity', { params }),
+};
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+export const adminApi = {
+  tmdbImportFull: (moviePages: number, tvPages: number) =>
+    api.post<ApiResponse<TmdbFullImportResult>>('/admin/tmdb/import/full', { moviePages, tvPages }),
+
+  tmdbImportMovie: (tmdbId: number) =>
+    api.post<ApiResponse<TmdbImportStats>>(`/admin/tmdb/import/movie/${tmdbId}`),
+
+  tmdbImportTv: (tmdbId: number) =>
+    api.post<ApiResponse<TmdbImportStats>>(`/admin/tmdb/import/tv/${tmdbId}`),
+
+  tmdbSearchMovies: (query: string, page = 1) =>
+    api.get<ApiResponse<TmdbPaginatedResult<TmdbMovieSearchResult>>>('/admin/tmdb/search/movie', {
+      params: { query, page },
+    }),
+
+  tmdbSearchTv: (query: string, page = 1) =>
+    api.get<ApiResponse<TmdbPaginatedResult<TmdbTvSearchResult>>>('/admin/tmdb/search/tv', {
+      params: { query, page },
+    }),
+
+  tmdbSyncDaily: () =>
+    api.post<ApiResponse<TmdbFullImportResult>>('/admin/tmdb/sync/daily'),
+
+  tmdbSyncLogs: (params?: { page?: number; limit?: number; syncType?: string; entityType?: string }) =>
+    api.get<SyncLogsResponse>('/admin/tmdb/sync/logs', { params }),
+
+  deleteMovie: (id: number) =>
+    api.delete<ApiResponse<{ message: string }>>(`/admin/movies/${id}`),
+
+  deleteTv: (id: number) =>
+    api.delete<ApiResponse<{ message: string }>>(`/admin/tv/${id}`),
+
+  // ─── Stats & Charts ─────────────────────────────────────────────────────────
+
+  getStats: () =>
+    api.get<ApiResponse<AdminStats>>('/admin/stats'),
+
+  getChartRatings: (days = 30) =>
+    api.get<ApiResponse<RatingsChartPoint[]>>('/admin/charts/ratings', { params: { days } }),
+
+  getChartTopMovies: (days = 30, limit = 10) =>
+    api.get<ApiResponse<TopMovieChartItem[]>>('/admin/charts/top-movies', { params: { days, limit } }),
+
+  getChartGenreDistribution: (limit = 10) =>
+    api.get<ApiResponse<GenreDistributionItem[]>>('/admin/charts/genre-distribution', { params: { limit } }),
+
+  // ─── Users ──────────────────────────────────────────────────────────────────
+
+  getUsers: (params?: { page?: number; limit?: number; q?: string; role?: string; status?: string }) =>
+    api.get<AdminUsersResponse>('/admin/users', { params }),
+
+  updateUser: (id: string, data: { role?: 'USER' | 'ADMIN'; status?: 'ACTIVE' | 'LOCKED' | 'UNVERIFIED'; displayName?: string; emailVerified?: boolean }) =>
+    api.patch<ApiResponse<AdminUser>>(`/admin/users/${id}`, data),
+
+  lockUser: (id: string, minutes: number, reason: string) =>
+    api.post<ApiResponse<AdminUser>>(`/admin/users/${id}/lock`, { minutes, reason }),
+
+  unlockUser: (id: string) =>
+    api.post<ApiResponse<AdminUser>>(`/admin/users/${id}/unlock`),
+
+  // ─── Comments ───────────────────────────────────────────────────────────────
+
+  getComments: (params?: { page?: number; limit?: number; status?: string; q?: string; reportedOnly?: boolean }) =>
+    api.get<AdminCommentsResponse>('/admin/comments', { params }),
+
+  hideComment: (id: number, resolveReports = true) =>
+    api.post<ApiResponse<AdminComment>>(`/admin/comments/${id}/hide`, { resolveReports }),
+
+  restoreComment: (id: number) =>
+    api.post<ApiResponse<AdminComment>>(`/admin/comments/${id}/restore`),
+
+  deleteAdminComment: (id: number) =>
+    api.delete<ApiResponse<AdminComment>>(`/admin/comments/${id}`),
+
+  // ─── People ─────────────────────────────────────────────────────────────────
+
+  getPeople: (params?: { page?: number; limit?: number; q?: string; sort_by?: string; sort_order?: string }) =>
+    api.get<AdminPeopleResponse>('/admin/people', { params }),
+
+  createPerson: (data: {
+    name: string;
+    originalName?: string | null;
+    biography?: string | null;
+    birthday?: string | null;
+    deathday?: string | null;
+    placeOfBirth?: string | null;
+    gender?: AdminPerson['gender'];
+    profileUrl?: string | null;
+    knownForDepartment?: string;
+  }) => api.post<ApiResponse<AdminPerson>>('/admin/people', data),
+
+  updatePerson: (id: number, data: {
+    name?: string;
+    originalName?: string | null;
+    biography?: string | null;
+    birthday?: string | null;
+    deathday?: string | null;
+    placeOfBirth?: string | null;
+    gender?: AdminPerson['gender'];
+    profileUrl?: string | null;
+    knownForDepartment?: string;
+  }) => api.put<ApiResponse<AdminPerson>>(`/admin/people/${id}`, data),
+
+  deletePerson: (id: number) =>
+    api.delete<ApiResponse<{ message: string }>>(`/admin/people/${id}`),
+
+  // ─── Genres ─────────────────────────────────────────────────────────────────
+
+  getAdminGenres: (params?: { page?: number; limit?: number; q?: string }) =>
+    api.get<AdminGenresResponse>('/admin/genres', { params }),
+
+  createGenre: (data: { name: string; slug?: string; tmdbId?: number | null }) =>
+    api.post<ApiResponse<AdminGenre>>('/admin/genres', data),
+
+  updateGenre: (id: number, data: { name?: string; slug?: string; tmdbId?: number | null }) =>
+    api.patch<ApiResponse<AdminGenre>>(`/admin/genres/${id}`, data),
+
+  deleteGenre: (id: number) =>
+    api.delete<ApiResponse<{ message: string }>>(`/admin/genres/${id}`),
 };
 
 // ─── Comments ─────────────────────────────────────────────────────────────────

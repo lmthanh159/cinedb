@@ -6,12 +6,17 @@ import {
 import {
   CommentStatus,
   Prisma,
+  UserRole,
+  UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 import type { ChangeUserPasswordDto } from '@/modules/users/dto/change-user-password.dto';
+import type { LockUserDto } from '@/modules/users/dto/lock-user.dto';
 import type { QueryActivityDto } from '@/modules/users/dto/query-activity.dto';
+import type { QueryAdminUsersDto } from '@/modules/users/dto/query-admin-users.dto';
 import type { QueryUserListDto } from '@/modules/users/dto/query-user-list.dto';
+import type { UpdateAdminUserDto } from '@/modules/users/dto/update-admin-user.dto';
 import type { UpdateUserProfileDto } from '@/modules/users/dto/update-user-profile.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RedisService } from '@/redis/redis.service';
@@ -250,6 +255,265 @@ export class UsersService {
         totalComments,
       },
     };
+  }
+
+  async getAdminUsers(query: QueryAdminUsersDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const where = this.buildAdminUserWhere(query);
+
+    const [total, users] = await this.prismaService.$transaction([
+      this.prismaService.user.count({ where }),
+      this.prismaService.user.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        select: this.adminUserSelect(),
+      }),
+    ]);
+
+    return {
+      data: users.map((user) => this.serializeAdminUser(user)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
+
+  async updateAdminUser(actorId: string, userId: string, dto: UpdateAdminUserDto) {
+    const user = await this.ensureAdminTargetUser(userId);
+
+    if (actorId === userId && dto.role && dto.role !== UserRole.ADMIN) {
+      throw this.createHttpException(
+        HttpStatus.BAD_REQUEST,
+        'Admin cannot remove their own admin role.',
+        'Bad Request',
+      );
+    }
+
+    const data: Prisma.UserUpdateInput = {
+      ...(dto.displayName !== undefined ? { displayName: dto.displayName.trim() } : {}),
+      ...(dto.bio !== undefined ? { bio: dto.bio.trim() || null } : {}),
+      ...(dto.avatarUrl !== undefined ? { avatarUrl: dto.avatarUrl.trim() || null } : {}),
+      ...(dto.language !== undefined ? { language: dto.language.trim() } : {}),
+      ...(dto.role !== undefined ? { role: dto.role } : {}),
+      ...(dto.status !== undefined ? { status: dto.status } : {}),
+      ...(dto.emailVerified !== undefined ? { emailVerified: dto.emailVerified } : {}),
+    };
+
+    if (dto.status === UserStatus.ACTIVE || dto.status === UserStatus.UNVERIFIED) {
+      data.lockedUntil = null;
+      data.loginAttempts = 0;
+    }
+
+    const updatedUser = await this.prismaService.user.update({
+      where: { id: user.id },
+      data,
+      select: this.adminUserSelect(),
+    });
+
+    await Promise.all([
+      this.redisService.del(this.getLoginAttemptsKey(user.email)),
+      this.logAdminUserActivity(actorId, 'ADMIN_USER_UPDATE', user.id, {
+        fields: Object.keys(dto),
+      }),
+    ]);
+
+    return this.serializeAdminUser(updatedUser);
+  }
+
+  async lockAdminUser(actorId: string, userId: string, dto: LockUserDto) {
+    if (actorId === userId) {
+      throw this.createHttpException(
+        HttpStatus.BAD_REQUEST,
+        'Admin cannot lock their own account.',
+        'Bad Request',
+      );
+    }
+
+    const user = await this.ensureAdminTargetUser(userId);
+    const minutes = dto.minutes ?? 30;
+    const lockedUntil = new Date(Date.now() + minutes * 60 * 1000);
+    const updatedUser = await this.prismaService.user.update({
+      where: { id: user.id },
+      data: {
+        status: UserStatus.LOCKED,
+        lockedUntil,
+        loginAttempts: 0,
+      },
+      select: this.adminUserSelect(),
+    });
+
+    await Promise.all([
+      this.prismaService.refreshToken.deleteMany({ where: { userId: user.id } }),
+      this.redisService.del(this.getLoginAttemptsKey(user.email)),
+      this.logAdminUserActivity(actorId, 'ADMIN_USER_LOCK', user.id, {
+        minutes,
+        ...(dto.reason?.trim() ? { reason: dto.reason.trim() } : {}),
+      }),
+    ]);
+
+    return this.serializeAdminUser(updatedUser);
+  }
+
+  async unlockAdminUser(actorId: string, userId: string) {
+    const user = await this.ensureAdminTargetUser(userId);
+    const nextStatus = user.emailVerified ? UserStatus.ACTIVE : UserStatus.UNVERIFIED;
+    const updatedUser = await this.prismaService.user.update({
+      where: { id: user.id },
+      data: {
+        status: nextStatus,
+        lockedUntil: null,
+        loginAttempts: 0,
+      },
+      select: this.adminUserSelect(),
+    });
+
+    await Promise.all([
+      this.redisService.del(this.getLoginAttemptsKey(user.email)),
+      this.logAdminUserActivity(actorId, 'ADMIN_USER_UNLOCK', user.id),
+    ]);
+
+    return this.serializeAdminUser(updatedUser);
+  }
+
+  async getAdminStats() {
+    const [totalUsers, totalRatings, totalComments] = await this.prismaService.$transaction([
+      this.prismaService.user.count(),
+      this.prismaService.rating.count(),
+      this.prismaService.comment.count({
+        where: {
+          status: {
+            not: CommentStatus.DELETED,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      totalUsers,
+      totalRatings,
+      totalComments,
+    };
+  }
+
+  private buildAdminUserWhere(query: QueryAdminUsersDto): Prisma.UserWhereInput {
+    const search = query.q?.trim();
+
+    return {
+      ...(query.role ? { role: query.role } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                email: {
+                  contains: search,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                displayName: {
+                  contains: search,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private adminUserSelect() {
+    return {
+      ...this.profileSelect(),
+      loginAttempts: true,
+      lockedUntil: true,
+      _count: {
+        select: {
+          ratings: true,
+          comments: true,
+        },
+      },
+    } satisfies Prisma.UserSelect;
+  }
+
+  private serializeAdminUser(user: {
+    id: string;
+    email: string;
+    displayName: string;
+    avatarUrl: string | null;
+    bio: string | null;
+    role: UserRole;
+    status: UserStatus;
+    emailVerified: boolean;
+    language: string;
+    loginAttempts: number;
+    lockedUntil: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    _count: {
+      ratings: number;
+      comments: number;
+    };
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      role: user.role,
+      status: user.status,
+      emailVerified: user.emailVerified,
+      language: user.language,
+      lockedUntil: user.lockedUntil,
+      loginAttempts: user.loginAttempts,
+      totalRatings: user._count.ratings,
+      totalComments: user._count.comments,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  private async ensureAdminTargetUser(userId: string) {
+    const user = await this.prismaService.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+      },
+    });
+
+    if (!user) {
+      throw this.createHttpException(HttpStatus.NOT_FOUND, 'User not found.', 'Not Found');
+    }
+
+    return user;
+  }
+
+  private async logAdminUserActivity(
+    actorId: string,
+    action: string,
+    targetUserId: string,
+    metadata: Record<string, Prisma.InputJsonValue> = {},
+  ) {
+    await this.logActivity(actorId, action, 'USER', undefined, {
+      ...metadata,
+      targetUserId,
+    });
+  }
+
+  private getLoginAttemptsKey(email: string) {
+    return `login_attempts:${email}`;
   }
 
   private async getCollection(

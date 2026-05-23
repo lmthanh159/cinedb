@@ -105,7 +105,7 @@ export function SearchBar({ className }: SearchBarProps) {
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
           <input
             ref={inputRef}
-            type="search"
+            type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => results.length > 0 && setIsOpen(true)}

@@ -12,6 +12,7 @@ import { SearchSyncService } from '@/modules/search/search-sync.service';
 import type { CreateEpisodeDto } from '@/modules/tv-series/dto/create-episode.dto';
 import type { CreateSeasonDto } from '@/modules/tv-series/dto/create-season.dto';
 import type { CreateTvSeriesDto } from '@/modules/tv-series/dto/create-tv-series.dto';
+import type { TvReviewsQueryDto } from '@/modules/tv-series/dto/tv-reviews-query.dto';
 import {
   TvSeriesCategory,
   TvSeriesQueryDto,
@@ -344,6 +345,83 @@ export class TvSeriesService {
     await this.redisService.set(cacheKey, response, this.similarCacheTtl);
 
     return response;
+  }
+
+  async getTvSeriesReviews(id: number, query: TvReviewsQueryDto) {
+    await this.ensureSeriesExists(id);
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const skip = (page - 1) * limit;
+    const orderBy =
+      query.sort_by === 'score'
+        ? ({ score: query.sort_order } as Prisma.RatingOrderByWithRelationInput)
+        : ({ createdAt: query.sort_order } as Prisma.RatingOrderByWithRelationInput);
+
+    const [total, ratings] = await this.prismaService.$transaction([
+      this.prismaService.rating.count({
+        where: {
+          seriesId: id,
+        },
+      }),
+      this.prismaService.rating.findMany({
+        where: {
+          seriesId: id,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              displayName: true,
+              avatarUrl: true,
+            },
+          },
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    const comments = await this.prismaService.comment.findMany({
+      where: {
+        seriesId: id,
+        status: 'ACTIVE',
+        userId: {
+          in: ratings.map((rating) => rating.userId),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      select: {
+        userId: true,
+        content: true,
+      },
+    });
+
+    const latestCommentByUser = new Map<string, string>();
+
+    for (const comment of comments) {
+      if (!latestCommentByUser.has(comment.userId)) {
+        latestCommentByUser.set(comment.userId, comment.content);
+      }
+    }
+
+    return {
+      data: ratings.map((rating) => ({
+        rating: rating.score,
+        comment: latestCommentByUser.get(rating.userId) ?? null,
+        user: rating.user,
+        createdAt: rating.createdAt,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   }
 
   async getSeason(seriesId: number, seasonNumber: number) {

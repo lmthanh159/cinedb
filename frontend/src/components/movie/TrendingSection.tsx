@@ -63,7 +63,7 @@ export function TrendingSection({ trendingDay, trendingWeek }: TrendingSectionPr
             href={ROUTES.MOVIES}
             className="text-sm text-blue-400 transition-colors hover:text-blue-300"
           >
-            See All
+            Xem tất cả
           </Link>
           <div className="hidden gap-1 md:flex">
             <button
@@ -90,7 +90,7 @@ export function TrendingSection({ trendingDay, trendingWeek }: TrendingSectionPr
         className="flex gap-3 overflow-x-auto px-4 pb-2 snap-x snap-mandatory md:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {movies.map((movie) => (
-          <div key={movie.id} className="w-[160px] flex-shrink-0 snap-start">
+          <div key={movie.id} className="w-[120px] flex-shrink-0 snap-start">
             <MovieCard movie={movie} />
           </div>
         ))}

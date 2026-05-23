@@ -1,8 +1,10 @@
+import Link from 'next/link';
 import type { Metadata } from 'next';
 
 import { HeroBanner } from '@/components/movie/HeroBanner';
-import { MovieCarousel } from '@/components/movie/MovieCarousel';
+import { MovieCard } from '@/components/movie/MovieCard';
 import { TrendingSection } from '@/components/movie/TrendingSection';
+import { ScrollableRow } from '@/components/ui/ScrollableRow';
 import type { MovieSummary, TrendingItem, TvSummary } from '@/types';
 
 export const revalidate = 60;
@@ -29,6 +31,36 @@ type TrendingPage = { data: TrendingItem[] };
 type MoviePage = { data: MovieSummary[] };
 type TvPage = { data: TvSummary[] };
 
+interface GridSectionProps {
+  title: string;
+  movies: MovieSummary[];
+  viewAllLink: string;
+  mediaType?: 'movie' | 'tv';
+}
+
+function GridSection({ title, movies, viewAllLink, mediaType = 'movie' }: GridSectionProps) {
+  return (
+    <section className="space-y-4" aria-label={title}>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-white">{title}</h2>
+        <Link
+          href={viewAllLink}
+          className="text-sm text-blue-400 transition-colors hover:text-blue-300"
+        >
+          Xem tất cả
+        </Link>
+      </div>
+      <ScrollableRow>
+        {movies.slice(0, 10).map((movie) => (
+          <div key={movie.id} className="w-[220px] flex-shrink-0">
+            <MovieCard movie={movie} mediaType={mediaType} />
+          </div>
+        ))}
+      </ScrollableRow>
+    </section>
+  );
+}
+
 export default async function HomePage() {
   const [
     trendingDayRes,
@@ -41,11 +73,11 @@ export default async function HomePage() {
   ] = await Promise.all([
     safeFetch<TrendingPage>('/trending/movie/day?page=1&limit=20'),
     safeFetch<TrendingPage>('/trending/movie/week?page=1&limit=20'),
-    safeFetch<MoviePage>('/movies?category=popular&limit=20'),
-    safeFetch<MoviePage>('/movies?category=now_playing&limit=20'),
-    safeFetch<MoviePage>('/movies?category=upcoming&limit=20'),
-    safeFetch<MoviePage>('/movies?category=top_rated&limit=20'),
-    safeFetch<TvPage>('/tv?category=popular&limit=20'),
+    safeFetch<MoviePage>('/movies?category=popular&limit=10'),
+    safeFetch<MoviePage>('/movies?category=now_playing&limit=10'),
+    safeFetch<MoviePage>('/movies?category=upcoming&limit=10'),
+    safeFetch<MoviePage>('/movies?category=top_rated&limit=10'),
+    safeFetch<TvPage>('/tv?category=popular&limit=10'),
   ]);
 
   const heroItems = (trendingDayRes?.data ?? []).slice(0, 5);
@@ -61,13 +93,13 @@ export default async function HomePage() {
     <div className="min-h-screen bg-slate-900">
       <HeroBanner items={heroItems} />
 
-      <div className="mx-auto max-w-7xl space-y-10 px-4 py-10 md:px-8">
+      <div className="mx-auto max-w-7xl space-y-12 px-4 py-10 md:px-8">
         {(trendingDay.length > 0 || trendingWeek.length > 0) && (
           <TrendingSection trendingDay={trendingDay} trendingWeek={trendingWeek} />
         )}
 
         {popular.length > 0 && (
-          <MovieCarousel
+          <GridSection
             title="Phim phổ biến"
             movies={popular}
             viewAllLink="/movies?category=popular"
@@ -75,7 +107,7 @@ export default async function HomePage() {
         )}
 
         {nowPlaying.length > 0 && (
-          <MovieCarousel
+          <GridSection
             title="Đang chiếu"
             movies={nowPlaying}
             viewAllLink="/movies?category=now_playing"
@@ -83,7 +115,7 @@ export default async function HomePage() {
         )}
 
         {upcoming.length > 0 && (
-          <MovieCarousel
+          <GridSection
             title="Sắp ra mắt"
             movies={upcoming}
             viewAllLink="/movies?category=upcoming"
@@ -91,7 +123,7 @@ export default async function HomePage() {
         )}
 
         {topRated.length > 0 && (
-          <MovieCarousel
+          <GridSection
             title="Đánh giá cao"
             movies={topRated}
             viewAllLink="/movies?category=top_rated"
@@ -99,10 +131,11 @@ export default async function HomePage() {
         )}
 
         {popularTv.length > 0 && (
-          <MovieCarousel
+          <GridSection
             title="TV Shows phổ biến"
             movies={popularTv}
             viewAllLink="/tv?category=popular"
+            mediaType="tv"
           />
         )}
       </div>

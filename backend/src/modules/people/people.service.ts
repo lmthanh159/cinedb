@@ -3,9 +3,16 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
-import { GenderType } from '@prisma/client';
+import {
+  GenderType,
+  Prisma,
+} from '@prisma/client';
 
 import { MessageResponseEntity } from '@/modules/auth/entities/auth-response.entity';
+import {
+  AdminPersonQueryDto,
+  AdminPersonSortBy,
+} from '@/modules/people/dto/admin-person-query.dto';
 import type { CreatePersonDto } from '@/modules/people/dto/create-person.dto';
 import type { PersonQueryDto } from '@/modules/people/dto/person-query.dto';
 import type { UpdatePersonDto } from '@/modules/people/dto/update-person.dto';
@@ -74,6 +81,35 @@ export class PeopleService {
     await this.redisService.set(cacheKey, response, this.popularCacheTtl);
 
     return response;
+  }
+
+  async getAdminPeople(query: AdminPersonQueryDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const where = this.buildAdminPersonWhere(query.q);
+    const orderBy = this.buildAdminPersonOrderBy(query);
+
+    const [total, people] = await this.prismaService.$transaction([
+      this.prismaService.person.count({ where }),
+      this.prismaService.person.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        select: this.personListSelect(),
+      }),
+    ]);
+
+    return {
+      data: people,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
   }
 
   async getPersonById(id: number) {
@@ -389,6 +425,67 @@ export class PeopleService {
       this.redisService.del(`person:${id}`),
       this.redisService.delPattern('person:popular:*'),
     ]);
+  }
+
+  private buildAdminPersonWhere(search?: string): Prisma.PersonWhereInput {
+    const q = search?.trim();
+
+    if (!q) {
+      return {};
+    }
+
+    return {
+      OR: [
+        {
+          name: {
+            contains: q,
+            mode: 'insensitive',
+          },
+        },
+        {
+          originalName: {
+            contains: q,
+            mode: 'insensitive',
+          },
+        },
+        {
+          knownForDepartment: {
+            contains: q,
+            mode: 'insensitive',
+          },
+        },
+      ],
+    };
+  }
+
+  private buildAdminPersonOrderBy(query: AdminPersonQueryDto): Prisma.PersonOrderByWithRelationInput {
+    switch (query.sort_by) {
+      case AdminPersonSortBy.NAME:
+        return { name: query.sort_order };
+      case AdminPersonSortBy.CREATED_AT:
+        return { createdAt: query.sort_order };
+      case AdminPersonSortBy.UPDATED_AT:
+        return { updatedAt: query.sort_order };
+      default:
+        return { popularity: query.sort_order };
+    }
+  }
+
+  private personListSelect() {
+    return {
+      id: true,
+      tmdbId: true,
+      name: true,
+      originalName: true,
+      biography: true,
+      birthday: true,
+      deathday: true,
+      placeOfBirth: true,
+      gender: true,
+      profileUrl: true,
+      popularity: true,
+      knownForDepartment: true,
+    } satisfies Prisma.PersonSelect;
   }
 
   private createHttpException(statusCode: HttpStatus, message: string, error: string) {

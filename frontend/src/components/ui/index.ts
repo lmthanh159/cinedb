@@ -29,4 +29,7 @@ export {
 export { RatingCircle, StarRating } from './StarRating';
 export type { RatingCircleProps, StarRatingProps } from './StarRating';
 
+export { ScrollableRow } from './ScrollableRow';
+export type { ScrollableRowProps } from './ScrollableRow';
+
 export { Toaster } from './Toaster';

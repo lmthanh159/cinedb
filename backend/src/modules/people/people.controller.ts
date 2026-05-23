@@ -27,6 +27,7 @@ import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { MessageResponseEntity } from '@/modules/auth/entities/auth-response.entity';
+import { AdminPersonQueryDto } from '@/modules/people/dto/admin-person-query.dto';
 import { CreatePersonDto } from '@/modules/people/dto/create-person.dto';
 import { PersonQueryDto } from '@/modules/people/dto/person-query.dto';
 import { UpdatePersonDto } from '@/modules/people/dto/update-person.dto';
@@ -94,6 +95,18 @@ export class PeopleController {
 @Controller('admin/people')
 export class AdminPeopleController {
   constructor(private readonly peopleService: PeopleService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get paginated people list for admin management' })
+  @ApiQuery({ name: 'page', required: false, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: 'q', required: false, example: 'miyazaki' })
+  @ApiQuery({ name: 'sort_by', required: false, enum: ['name', 'popularity', 'created_at', 'updated_at'] })
+  @ApiQuery({ name: 'sort_order', required: false, enum: ['asc', 'desc'] })
+  @ApiOkResponse({ type: PersonListResponseEntity })
+  async getPeople(@Query() query: AdminPersonQueryDto) {
+    return this.peopleService.getAdminPeople(query);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a person record' })

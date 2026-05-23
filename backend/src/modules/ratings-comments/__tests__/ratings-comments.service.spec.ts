@@ -4,6 +4,7 @@ import {
 } from '@nestjs/common';
 import {
   CommentStatus,
+  ReportStatus,
   UserRole,
 } from '@prisma/client';
 import { validate } from 'class-validator';
@@ -33,13 +34,16 @@ describe('RatingsCommentsService', () => {
       findMany: jest.fn(),
     },
     comment: {
+      count: jest.fn(),
       create: jest.fn(),
+      findMany: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
     },
     report: {
       findFirst: jest.fn(),
       create: jest.fn(),
+      updateMany: jest.fn(),
     },
     activityLog: {
       create: jest.fn(),
@@ -69,9 +73,40 @@ describe('RatingsCommentsService', () => {
     });
     prismaService.$executeRaw = jest.fn().mockResolvedValue(1);
     prismaService.activityLog.create = jest.fn().mockResolvedValue({ id: 1 });
+    prismaService.comment.count = jest.fn().mockResolvedValue(1);
+    prismaService.comment.findMany = jest.fn().mockResolvedValue([createAdminComment()]);
+    prismaService.report.updateMany = jest.fn().mockResolvedValue({ count: 1 });
     redisService.del = jest.fn().mockResolvedValue(undefined);
     redisService.delPattern = jest.fn().mockResolvedValue(undefined);
   });
+
+  function createAdminComment(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 1,
+      content: 'Great movie',
+      status: CommentStatus.ACTIVE,
+      movieId: 1,
+      seriesId: null,
+      user: {
+        id: userId,
+        email: 'user@example.com',
+        displayName: 'User',
+        avatarUrl: null,
+      },
+      movie: {
+        id: 1,
+        title: 'Movie',
+        posterUrl: 'poster.jpg',
+      },
+      series: null,
+      _count: {
+        reports: 1,
+      },
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
 
   async function expectHttpStatus(promise: Promise<unknown>, status: HttpStatus) {
     try {
@@ -346,5 +381,81 @@ describe('RatingsCommentsService', () => {
       }),
       HttpStatus.CONFLICT,
     );
+  });
+
+  it('gets admin comments with filters and report counts', async () => {
+    prismaService.$transaction = jest.fn().mockResolvedValue([
+      1,
+      [createAdminComment()],
+    ]);
+
+    const result = await service.getAdminComments({
+      page: 1,
+      limit: 20,
+      status: CommentStatus.ACTIVE,
+      q: 'movie',
+      reportedOnly: true,
+    });
+
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        id: 1,
+        reportCount: 1,
+        movie: expect.objectContaining({
+          title: 'Movie',
+        }),
+      }),
+    );
+    expect(result.meta.total).toBe(1);
+  });
+
+  it('hides a comment and resolves pending reports', async () => {
+    prismaService.comment.findUnique = jest.fn().mockResolvedValue({
+      id: 1,
+      status: CommentStatus.ACTIVE,
+    });
+    prismaService.comment.update = jest.fn().mockResolvedValue(createAdminComment({
+      status: CommentStatus.HIDDEN,
+    }));
+
+    const result = await service.hideComment(userId, 1, {
+      resolveReports: true,
+      reason: 'Reported abuse',
+    });
+
+    expect(result.status).toBe(CommentStatus.HIDDEN);
+    expect(prismaService.comment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: CommentStatus.HIDDEN,
+        }),
+      }),
+    );
+    expect(prismaService.report.updateMany).toHaveBeenCalledWith({
+      where: {
+        commentId: 1,
+        status: ReportStatus.PENDING,
+      },
+      data: expect.objectContaining({
+        status: ReportStatus.RESOLVED,
+        resolvedBy: userId,
+      }),
+    });
+    expect(redisService.del).toHaveBeenCalledWith('movie:1');
+  });
+
+  it('soft deletes a comment as admin moderation', async () => {
+    prismaService.comment.findUnique = jest.fn().mockResolvedValue({
+      id: 1,
+      status: CommentStatus.ACTIVE,
+    });
+    prismaService.comment.update = jest.fn().mockResolvedValue(createAdminComment({
+      status: CommentStatus.DELETED,
+    }));
+
+    const result = await service.deleteAdminComment(userId, 1);
+
+    expect(result.status).toBe(CommentStatus.DELETED);
+    expect(prismaService.report.updateMany).toHaveBeenCalled();
   });
 });

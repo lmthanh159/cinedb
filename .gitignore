@@ -15,5 +15,7 @@ postgres_data/
 es_data/
 .DS_Store
 .claude/
+.vscode/
 *.md
 !README.md
+*.tsbuildinfo

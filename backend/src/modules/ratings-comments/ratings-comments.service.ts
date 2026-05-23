@@ -6,12 +6,15 @@ import {
 import {
   CommentStatus,
   Prisma,
+  ReportStatus,
   UserRole,
 } from '@prisma/client';
 
 import { BANNED_WORDS } from '@/config/banned-words';
 import type { CreateCommentDto } from '@/modules/ratings-comments/dto/create-comment.dto';
 import type { CreateRatingDto } from '@/modules/ratings-comments/dto/create-rating.dto';
+import type { ModerateCommentDto } from '@/modules/ratings-comments/dto/moderate-comment.dto';
+import type { QueryAdminCommentsDto } from '@/modules/ratings-comments/dto/query-admin-comments.dto';
 import type { QueryRatingDto } from '@/modules/ratings-comments/dto/query-rating.dto';
 import type { ReportCommentDto } from '@/modules/ratings-comments/dto/report-comment.dto';
 import type { UpdateCommentDto } from '@/modules/ratings-comments/dto/update-comment.dto';
@@ -399,6 +402,270 @@ export class RatingsCommentsService {
       ...report,
       message: 'Comment reported successfully',
     };
+  }
+
+  async getAdminComments(query: QueryAdminCommentsDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const where = this.buildAdminCommentWhere(query);
+
+    const [total, comments] = await this.prismaService.$transaction([
+      this.prismaService.comment.count({ where }),
+      this.prismaService.comment.findMany({
+        where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        include: this.adminCommentInclude(),
+      }),
+    ]);
+
+    return {
+      data: comments.map((comment) => this.serializeAdminComment(comment)),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
+
+  async moderateComment(actorId: string, commentId: number, dto: ModerateCommentDto) {
+    if (dto.content !== undefined) {
+      this.ensureAllowedContent(dto.content);
+    }
+
+    const existingComment = await this.findAdminModeratableComment(commentId);
+    const updatedComment = await this.prismaService.comment.update({
+      where: {
+        id: existingComment.id,
+      },
+      data: {
+        ...(dto.content !== undefined ? { content: dto.content.trim() } : {}),
+        ...(dto.status !== undefined ? { status: dto.status } : {}),
+      },
+      include: this.adminCommentInclude(),
+    });
+
+    await Promise.all([
+      this.invalidateCommentTargetCaches(updatedComment.movieId, updatedComment.seriesId),
+      ...(dto.resolveReports
+        ? [this.resolvePendingReportsForComment(actorId, updatedComment.id)]
+        : []),
+      this.logActivity(actorId, 'ADMIN_COMMENT_MODERATE', 'COMMENT', updatedComment.id, {
+        fields: Object.keys(dto),
+        status: dto.status ?? existingComment.status,
+        ...(dto.reason?.trim() ? { reason: dto.reason.trim() } : {}),
+      }),
+    ]);
+
+    return this.serializeAdminComment(updatedComment);
+  }
+
+  async hideComment(actorId: string, commentId: number, dto: ModerateCommentDto) {
+    return this.moderateComment(actorId, commentId, {
+      ...dto,
+      status: CommentStatus.HIDDEN,
+    });
+  }
+
+  async restoreComment(actorId: string, commentId: number, dto: ModerateCommentDto) {
+    return this.moderateComment(actorId, commentId, {
+      ...dto,
+      status: CommentStatus.ACTIVE,
+    });
+  }
+
+  async deleteAdminComment(actorId: string, commentId: number) {
+    return this.moderateComment(actorId, commentId, {
+      status: CommentStatus.DELETED,
+      resolveReports: true,
+    });
+  }
+
+  private buildAdminCommentWhere(query: QueryAdminCommentsDto): Prisma.CommentWhereInput {
+    const search = query.q?.trim();
+
+    return {
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.userId ? { userId: query.userId } : {}),
+      ...(query.movieId ? { movieId: query.movieId } : {}),
+      ...(query.seriesId ? { seriesId: query.seriesId } : {}),
+      ...(query.reportedOnly
+        ? {
+            reports: {
+              some: {
+                status: ReportStatus.PENDING,
+              },
+            },
+          }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                content: {
+                  contains: search,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                user: {
+                  displayName: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                user: {
+                  email: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                movie: {
+                  title: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                series: {
+                  title: {
+                    contains: search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private async findAdminModeratableComment(commentId: number) {
+    const comment = await this.prismaService.comment.findUnique({
+      where: {
+        id: commentId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!comment) {
+      throw this.createHttpException(HttpStatus.NOT_FOUND, 'Comment not found.', 'Not Found');
+    }
+
+    return comment;
+  }
+
+  private adminCommentInclude() {
+    return {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          avatarUrl: true,
+        },
+      },
+      movie: {
+        select: {
+          id: true,
+          title: true,
+          posterUrl: true,
+        },
+      },
+      series: {
+        select: {
+          id: true,
+          title: true,
+          posterUrl: true,
+        },
+      },
+      _count: {
+        select: {
+          reports: true,
+        },
+      },
+    } satisfies Prisma.CommentInclude;
+  }
+
+  private serializeAdminComment(comment: {
+    id: number;
+    content: string;
+    status: CommentStatus;
+    movieId: number | null;
+    seriesId: number | null;
+    user: {
+      id: string;
+      email: string;
+      displayName: string;
+      avatarUrl: string | null;
+    };
+    movie: {
+      id: number;
+      title: string;
+      posterUrl: string | null;
+    } | null;
+    series: {
+      id: number;
+      title: string;
+      posterUrl: string | null;
+    } | null;
+    _count: {
+      reports: number;
+    };
+    createdAt: Date;
+    updatedAt: Date;
+  }) {
+    return {
+      id: comment.id,
+      content: comment.content,
+      status: comment.status,
+      movieId: comment.movieId,
+      seriesId: comment.seriesId,
+      user: comment.user,
+      movie: comment.movie,
+      series: comment.series,
+      reportCount: comment._count.reports,
+      createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt,
+    };
+  }
+
+  private async resolvePendingReportsForComment(actorId: string, commentId: number) {
+    await this.prismaService.report.updateMany({
+      where: {
+        commentId,
+        status: ReportStatus.PENDING,
+      },
+      data: {
+        status: ReportStatus.RESOLVED,
+        resolvedBy: actorId,
+        resolvedAt: new Date(),
+      },
+    });
+  }
+
+  private async invalidateCommentTargetCaches(movieId: number | null, seriesId: number | null) {
+    if (movieId) {
+      await this.invalidateMovieCaches(movieId);
+    }
+
+    if (seriesId) {
+      await this.invalidateSeriesCaches(seriesId);
+    }
   }
 
   private async ensureMovieExists(movieId: number) {

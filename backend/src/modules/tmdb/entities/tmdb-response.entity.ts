@@ -35,6 +35,9 @@ export class TmdbSyncLogEntity extends TmdbImportStatsEntity {
   @ApiProperty({ example: 'SUCCESS' })
   status!: string;
 
+  @ApiProperty({ example: '2026-05-15T00:00:00.000Z' })
+  startedAt!: Date;
+
   @ApiPropertyOptional({ example: '2026-05-15T00:00:00.000Z', nullable: true })
   completedAt?: Date | null;
 }

@@ -19,12 +19,16 @@ const ratingStroke = (value: number) => {
 
 export interface RatingCircleProps {
   value: number;
+  tmdbValue?: number;
   size?: number;
   className?: string;
 }
 
-export function RatingCircle({ value, size = 56, className }: RatingCircleProps) {
-  const pct = Math.min(Math.max(value, 0), 10) / 10;
+export function RatingCircle({ value, tmdbValue = 0, size = 56, className }: RatingCircleProps) {
+  const effective = value > 0 ? value : tmdbValue > 0 ? tmdbValue : null;
+  if (effective === null) return null;
+
+  const pct = Math.min(Math.max(effective, 0), 10) / 10;
   const offset = CIRCUMFERENCE * (1 - pct);
 
   return (
@@ -34,7 +38,7 @@ export function RatingCircle({ value, size = 56, className }: RatingCircleProps)
         className,
       )}
       style={{ width: size, height: size }}
-      aria-label={`Rating: ${value.toFixed(1)} out of 10`}
+      aria-label={`Rating: ${effective.toFixed(1)} out of 10`}
     >
       <svg
         width={size}
@@ -43,7 +47,6 @@ export function RatingCircle({ value, size = 56, className }: RatingCircleProps)
         className="-rotate-90"
         aria-hidden="true"
       >
-        {/* Track */}
         <circle
           cx={VIEW_SIZE / 2}
           cy={VIEW_SIZE / 2}
@@ -52,13 +55,12 @@ export function RatingCircle({ value, size = 56, className }: RatingCircleProps)
           stroke="#334155"
           strokeWidth="4"
         />
-        {/* Progress */}
         <circle
           cx={VIEW_SIZE / 2}
           cy={VIEW_SIZE / 2}
           r={RADIUS}
           fill="none"
-          stroke={ratingStroke(value)}
+          stroke={ratingStroke(effective)}
           strokeWidth="4"
           strokeDasharray={CIRCUMFERENCE}
           strokeDashoffset={offset}
@@ -66,10 +68,11 @@ export function RatingCircle({ value, size = 56, className }: RatingCircleProps)
         />
       </svg>
       <span
-        className={cn('absolute text-xs font-bold', getRatingColor(value))}
+        className={cn('absolute font-bold tabular-nums', getRatingColor(effective))}
+        style={{ fontSize: size <= 36 ? '9px' : size <= 44 ? '11px' : '12px' }}
         aria-hidden="true"
       >
-        {value === 0 ? 'NR' : value.toFixed(1)}
+        {effective.toFixed(1)}
       </span>
     </div>
   );

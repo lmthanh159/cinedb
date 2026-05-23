@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { SearchSyncService } from '@/modules/search/search-sync.service';
 import { FullImportDto } from '@/modules/tmdb/dto/full-import.dto';
 import { SyncLogsQueryDto } from '@/modules/tmdb/dto/sync-logs-query.dto';
+import { TmdbVideos } from '@/modules/tmdb/interfaces/tmdb.interface';
 import { TmdbClientService } from '@/modules/tmdb/tmdb-client.service';
 import {
   MappedMovie,
@@ -602,7 +603,8 @@ export class TmdbSyncService {
   }
 
   private async replaceMovieMedia(movieId: number, detail: Parameters<TmdbMapperService['toMovie']>[0]) {
-    const trailers = this.tmdbMapperService.toTrailers(detail.videos);
+    const videos = await this.getMovieVideosWithFallback(detail);
+    const trailers = this.tmdbMapperService.toTrailers(videos);
     const images = this.tmdbMapperService.toImages(detail.images);
 
     await Promise.all([
@@ -621,10 +623,12 @@ export class TmdbSyncService {
           })
         : Promise.resolve(),
     ]);
+    await this.invalidateMovieCaches(movieId);
   }
 
   private async replaceSeriesMedia(seriesId: number, detail: Parameters<TmdbMapperService['toTVSeries']>[0]) {
-    const trailers = this.tmdbMapperService.toTrailers(detail.videos);
+    const videos = await this.getSeriesVideosWithFallback(detail);
+    const trailers = this.tmdbMapperService.toTrailers(videos);
     const images = this.tmdbMapperService.toImages(detail.images);
 
     await Promise.all([
@@ -643,6 +647,7 @@ export class TmdbSyncService {
           })
         : Promise.resolve(),
     ]);
+    await this.invalidateSeriesCaches(seriesId);
   }
 
   private async replaceSeasons(seriesId: number, detail: Parameters<TmdbMapperService['toTVSeries']>[0]) {
@@ -680,6 +685,82 @@ export class TmdbSyncService {
         });
       }
     }
+  }
+
+  private async getMovieVideosWithFallback(
+    detail: Parameters<TmdbMapperService['toMovie']>[0],
+  ): Promise<TmdbVideos | undefined> {
+    const localizedVideos = detail.videos;
+    const localizedTrailers = this.tmdbMapperService.toTrailers(localizedVideos);
+
+    if (localizedTrailers.length > 0) {
+      return localizedVideos;
+    }
+
+    try {
+      const fallbackVideos = await this.tmdbClientService.getMovieVideos(detail.id, 'en-US');
+
+      return this.mergeVideos(localizedVideos, fallbackVideos);
+    } catch (error) {
+      this.logger.warn(`Failed to fetch fallback movie videos for TMDB ${detail.id}: ${String(error)}`);
+
+      return localizedVideos;
+    }
+  }
+
+  private async getSeriesVideosWithFallback(
+    detail: Parameters<TmdbMapperService['toTVSeries']>[0],
+  ): Promise<TmdbVideos | undefined> {
+    const localizedVideos = detail.videos;
+    const localizedTrailers = this.tmdbMapperService.toTrailers(localizedVideos);
+
+    if (localizedTrailers.length > 0) {
+      return localizedVideos;
+    }
+
+    try {
+      const fallbackVideos = await this.tmdbClientService.getTVSeriesVideos(
+        detail.id,
+        'en-US',
+        'en-US,en,null',
+      );
+
+      return this.mergeVideos(localizedVideos, fallbackVideos);
+    } catch (error) {
+      this.logger.warn(`Failed to fetch fallback TV videos for TMDB ${detail.id}: ${String(error)}`);
+
+      return localizedVideos;
+    }
+  }
+
+  private mergeVideos(...videoGroups: Array<TmdbVideos | undefined>): TmdbVideos {
+    const videos = new Map<string, TmdbVideos['results'][number]>();
+
+    for (const group of videoGroups) {
+      for (const video of group?.results ?? []) {
+        videos.set(video.id || `${video.site}:${video.key}`, video);
+      }
+    }
+
+    return {
+      results: [...videos.values()],
+    };
+  }
+
+  private async invalidateMovieCaches(movieId: number) {
+    await Promise.allSettled([
+      this.redisService.del(`movie:${movieId}`),
+      this.redisService.del(`movie:${movieId}:similar`),
+      this.redisService.delPattern('movies:*'),
+    ]);
+  }
+
+  private async invalidateSeriesCaches(seriesId: number) {
+    await Promise.allSettled([
+      this.redisService.del(`tv:${seriesId}`),
+      this.redisService.del(`tv:${seriesId}:similar`),
+      this.redisService.delPattern('tv:*'),
+    ]);
   }
 
   private async startSyncLog(syncType: string, entityType: string) {
