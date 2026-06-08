@@ -75,13 +75,15 @@ npm run dev
 # recommendation
 cd recommendation
 python -m pip install -r requirements.txt
+cp .env.example .env  # Windows PowerShell: copy .env.example .env
 python scripts/train.py
 uvicorn app.main:app --reload --host 127.0.0.1 --port 5000
 ```
 
 The recommendation service exposes `GET /health`, `GET /recommend/similar/{movie_id}`,
 `GET /recommend/personalized/{user_id}`, and `POST /recommend/retrain`. The NestJS
-backend proxies these through `/api/v1/recommendations/*` and falls back to Prisma
+backend proxies these through `GET /api/v1/recommendations/similar/:movieId` and
+authenticated `GET /api/v1/recommendations/personalized`, then falls back to Prisma
 queries if the Python service is unavailable.
 
 ## Local Endpoints
@@ -176,12 +178,69 @@ Phase 1 implemented these backend modules:
 
 Phase 3 added these backend modules:
 
-- **Admin dashboard** — aggregate stats (total users, ratings, comments), ratings-over-time chart, top-rated movies list, and genre distribution chart.
+- **Admin dashboard** — aggregate stats (total users, ratings, comments), ratings-over-time chart, top movies by user-rating volume, and genre distribution chart.
 - **Admin user management** — paginated user list with search, lock/unlock with duration, role update, per-user rating and comment counts.
 - **Admin comment moderation** — paginated comment list filterable by status and reported flag; hide, restore, and soft delete actions with report resolution.
 - **Admin people CRUD** — `GET/POST /admin/people`, `PUT/DELETE /admin/people/:id` with full person fields (gender, biography, birthday, deathday, place of birth).
 - **Admin genres CRUD** — `GET/POST /admin/genres`, `PATCH/DELETE /admin/genres/:id` with slug auto-generation; delete returns 409 if genre is still in use.
-- **Recommendations module** — proxies `GET /recommend/similar/:id` and `GET /recommend/personalized/:userId` to the FastAPI service; falls back to Prisma queries when the service is unavailable.
+- **Recommendations module** — exposes `GET /api/v1/recommendations/similar/:movieId` and authenticated `GET /api/v1/recommendations/personalized`; proxies to the FastAPI service and falls back to Prisma queries when the service is unavailable.
+
+## Backend API Highlights
+
+The backend uses the global prefix `/api/v1`.
+
+### Public content
+
+- `GET /health`
+- `GET /movies`, `GET /movies/:id`, `GET /movies/:id/credits`, `GET /movies/:id/images`, `GET /movies/:id/videos`, `GET /movies/:id/similar`, `GET /movies/:id/reviews`
+- `GET /tv`, `GET /tv/:id`, `GET /tv/:id/credits`, `GET /tv/:id/videos`, `GET /tv/:id/similar`, `GET /tv/:id/reviews`, `GET /tv/:id/season/:seasonNumber`, `GET /tv/:id/season/:seasonNumber/episode/:episodeNumber`
+- `GET /person/popular`, `GET /person/:id`, `GET /person/:id/movie-credits`, `GET /person/:id/tv-credits`, `GET /person/:id/images`
+- `GET /genres/movie`, `GET /genres/tv`, `GET /trending/:mediaType/:timeWindow`
+- `GET /search/multi`, `GET /search/movie`, `GET /search/tv`, `GET /search/person`, `GET /search/autocomplete`
+- `GET /discover/movie`, `GET /discover/tv`
+- `GET /recommendations/similar/:movieId`
+
+### Authenticated user
+
+- `GET/PATCH /users/me`, `PATCH /users/me/password`
+- `GET /users/me/watchlist`, `GET /users/me/favorites`, `GET /users/me/ratings`, `GET /users/me/activity`
+- `POST/DELETE /movies/:id/rating`, `POST/DELETE /tv/:id/rating`
+- `POST/DELETE /movies/:id/watchlist`, `POST/DELETE /tv/:id/watchlist`
+- `POST/DELETE /movies/:id/favorite`, `POST/DELETE /tv/:id/favorite`
+- `POST /comments`, `PATCH/DELETE /comments/:id`, `POST /comments/:id/report`
+- `GET /recommendations/personalized`
+
+### Admin
+
+- `GET /admin/stats`
+- `GET /admin/charts/ratings`, `GET /admin/charts/top-movies`, `GET /admin/charts/genre-distribution`
+- `GET /admin/users`, `PATCH /admin/users/:id`, `POST /admin/users/:id/lock`, `POST /admin/users/:id/unlock`
+- `GET /admin/comments`, `PATCH /admin/comments/:id`, `POST /admin/comments/:id/hide`, `POST /admin/comments/:id/restore`, `DELETE /admin/comments/:id`
+- `POST /admin/movies`, `PUT /admin/movies/:id`, `DELETE /admin/movies/:id`
+- `POST /admin/tv`, `PUT /admin/tv/:id`, `DELETE /admin/tv/:id`, plus season and episode CRUD under `/admin/tv/:id/season/...`
+- `GET/POST /admin/people`, `PUT/DELETE /admin/people/:id`
+- `GET/POST /admin/genres`, `PATCH/DELETE /admin/genres/:id`
+- `POST /admin/search/reindex`
+- `POST /admin/tmdb/import/full`, `POST /admin/tmdb/import/movie/:tmdbId`, `POST /admin/tmdb/import/tv/:tmdbId`, `GET /admin/tmdb/search/movie`, `GET /admin/tmdb/search/tv`, `POST /admin/tmdb/sync/daily`, `GET /admin/tmdb/sync/logs`
+
+`GET /movies/:id/reviews` and `GET /tv/:id/reviews` are rating-based public review feeds: each row is one user rating, with the latest active comment from that same user attached as `comment` when available.
+
+## Recommendation Service
+
+The FastAPI recommendation service is movie-only at this stage.
+
+- `GET /health`: verifies database connectivity, model files, and `last_trained`.
+- `GET /recommend/similar/{movie_id}?limit=12`: content-based similar movie IDs/scores.
+- `GET /recommend/personalized/{user_id}?limit=20`: hybrid personalized movie IDs/scores.
+- `POST /recommend/retrain`: background retrain, then reloads model cache.
+
+Training uses PostgreSQL data:
+
+- Content-based model: movie genres, top cast, director, popularity, and vote average with cosine similarity.
+- Collaborative model: movie ratings matrix with `TruncatedSVD`.
+- Hybrid personalized logic: popular fallback for users with no ratings, content-based seed for users with fewer than 5 ratings, and blended collaborative/content-based scoring for users with at least 5 ratings.
+
+The service expects `DATABASE_URL` to point to the Docker PostgreSQL host port, which is `localhost:55432` in this repo.
 
 ## Frontend Pages
 
@@ -330,7 +389,7 @@ After the Phase 1 checkpoint, the local database contained:
 ## Phase 3 Checkpoint (v0.4.0)
 
 - 14 new frontend routes implemented: user account pages (profile, watchlist, favorites, ratings, activity, verify-email) and admin dashboard pages (overview, users, comments, movies, TV, people, genres, TMDB sync).
-- Admin dashboard with stats cards and three charts: ratings trend over time, top-rated movies, and genre distribution.
+- Admin dashboard with stats cards and three charts: ratings trend over time, top movies by user-rating volume, and genre distribution.
 - Admin user management: search, lock/unlock with duration, promote/demote role.
 - Admin comment moderation: filter by status and reported-only flag, hide/restore/soft delete with report auto-resolution.
 - Admin people CRUD: create/edit modal with all person fields; hard delete with confirmation.
@@ -344,12 +403,7 @@ After the Phase 1 checkpoint, the local database contained:
 
 ## Documentation
 
-- [architecture.md](./architecture.md)
-- [implementation-roadmap.md](./implementation-roadmap.md)
-- [phase-0-infrastructure.md](./phase-0-infrastructure.md)
-- [phase-1-backend.md](./phase-1-backend.md)
-- [phase-2-frontend.md](./phase-2-frontend.md)
-- [phase-3-4-advanced-production.md](./phase-3-4-advanced-production.md)
+`README.md` is the tracked project documentation entry point. Historical planning and handoff Markdown files are intentionally ignored by Git (`*.md` with `!README.md`) so local notes do not ship with releases.
 
 ## Notes
 

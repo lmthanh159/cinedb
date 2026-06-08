@@ -13,6 +13,7 @@ __pycache__/
 *.pkl
 postgres_data/
 es_data/
+backups/
 .DS_Store
 .claude/
 .vscode/
